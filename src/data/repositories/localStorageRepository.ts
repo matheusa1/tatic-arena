@@ -18,7 +18,7 @@ export function createInitialGameState(): GameSnapshot {
   return {
     version: GAME_STATE_VERSION,
     coins: 10000,
-    crystals: 2000000000,
+    crystals: 100000,
     levelPotions: 0,
     ultraCores: 0,
     chests: {
@@ -53,8 +53,11 @@ function mergeRoster(savedRoster: GameSnapshot["roster"] | undefined) {
           ...baseCharacter,
           ...savedCharacter,
           weaponLevel: savedCharacter?.weaponLevel ?? baseCharacter.weaponLevel,
-          basicSkillLevel: savedCharacter?.basicSkillLevel ?? baseCharacter.basicSkillLevel,
-          specialSkillLevel: savedCharacter?.specialSkillLevel ?? baseCharacter.specialSkillLevel,
+          basicSkillLevel:
+            savedCharacter?.basicSkillLevel ?? baseCharacter.basicSkillLevel,
+          specialSkillLevel:
+            savedCharacter?.specialSkillLevel ??
+            baseCharacter.specialSkillLevel,
           equippedSkinId: savedCharacter?.equippedSkinId,
           pet: savedCharacter?.pet
             ? {
@@ -65,7 +68,7 @@ function mergeRoster(savedRoster: GameSnapshot["roster"] | undefined) {
             : undefined,
         },
       ];
-    })
+    }),
   );
 }
 
@@ -87,7 +90,10 @@ export function loadGameState(): GameSnapshot | undefined {
       return undefined;
     }
     const initialState = createInitialGameState();
-    const formation = normalizeTeamFormation(parsed.formation, parsed.team ?? initialState.team);
+    const formation = normalizeTeamFormation(
+      parsed.formation,
+      parsed.team ?? initialState.team,
+    );
 
     return {
       ...initialState,
