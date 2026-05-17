@@ -1,5 +1,6 @@
-import { GachaBanner } from '../domain/entities/gacha';
-import { EventMilestone, EventPackage, LuckyDiceShopItem } from '../domain/entities/event';
+import type { ChestDefinition } from '../domain/entities/chest';
+import type { EventMilestone, EventPackage, LuckyDiceShopItem } from '../domain/entities/event';
+import type { GachaBanner } from '../domain/entities/gacha';
 
 export const STORAGE_KEY = 'heroes-tactics-arena:v1';
 export const GAME_STATE_VERSION = 1;
@@ -39,6 +40,156 @@ export const GACHA_BANNERS: Record<GachaBanner['id'], GachaBanner> = {
       { rarity: 'raro', weight: 50 },
       { rarity: 'épico', weight: 40 },
       { rarity: 'lendário', weight: 10 }
+    ]
+  }
+};
+
+export const CHEST_DEFINITIONS: Record<ChestDefinition['type'], ChestDefinition> = {
+  raro: {
+    type: 'raro',
+    name: 'Bau Raro',
+    shortName: 'Raro',
+    description: 'Recompensas de progresso com chance de fragmentos e recursos extras.',
+    accentColor: '#2563eb',
+    glowColor: 'rgba(37, 99, 235, 0.34)',
+    lootTable: [
+      {
+        rewardType: 'fragments',
+        label: 'Fragmentos raros',
+        weight: 34,
+        tier: 'rare',
+        reward: { fragments: [{ rarity: 'raro', amount: 12 }] }
+      },
+      {
+        rewardType: 'potions',
+        label: 'Pocoes de nivel',
+        weight: 24,
+        reward: { levelPotions: 18 }
+      },
+      {
+        rewardType: 'coins',
+        label: 'Moedas',
+        weight: 22,
+        reward: { coins: 3500 }
+      },
+      {
+        rewardType: 'crystals',
+        label: 'Cristais',
+        weight: 14,
+        tier: 'rare',
+        reward: { crystals: 180 }
+      },
+      {
+        rewardType: 'item',
+        label: 'Nucleo Ultra',
+        weight: 6,
+        tier: 'epic',
+        reward: { ultraCores: 1 }
+      }
+    ]
+  },
+  épico: {
+    type: 'épico',
+    name: 'Bau Epico',
+    shortName: 'Epico',
+    description: 'Um bau superior com premios maiores e fragmentos epicos frequentes.',
+    accentColor: '#a21caf',
+    glowColor: 'rgba(162, 28, 175, 0.36)',
+    lootTable: [
+      {
+        rewardType: 'fragments',
+        label: 'Fragmentos epicos',
+        weight: 32,
+        tier: 'epic',
+        reward: { fragments: [{ rarity: 'épico', amount: 14 }] }
+      },
+      {
+        rewardType: 'fragments',
+        label: 'Fragmentos lendarios',
+        weight: 8,
+        tier: 'legendary',
+        reward: { fragments: [{ rarity: 'lendário', amount: 5 }] }
+      },
+      {
+        rewardType: 'potions',
+        label: 'Pocoes de nivel',
+        weight: 20,
+        tier: 'rare',
+        reward: { levelPotions: 36 }
+      },
+      {
+        rewardType: 'coins',
+        label: 'Moedas',
+        weight: 18,
+        tier: 'rare',
+        reward: { coins: 8000 }
+      },
+      {
+        rewardType: 'crystals',
+        label: 'Cristais',
+        weight: 14,
+        tier: 'epic',
+        reward: { crystals: 420 }
+      },
+      {
+        rewardType: 'item',
+        label: 'Nucleo Ultra',
+        weight: 8,
+        tier: 'epic',
+        reward: { ultraCores: 1 }
+      }
+    ]
+  },
+  lendário: {
+    type: 'lendário',
+    name: 'Bau Lendario',
+    shortName: 'Lendario',
+    description: 'Premios altos, fragmentos lendarios e a melhor chance de item raro.',
+    accentColor: '#d97706',
+    glowColor: 'rgba(217, 119, 6, 0.42)',
+    lootTable: [
+      {
+        rewardType: 'fragments',
+        label: 'Fragmentos lendarios',
+        weight: 38,
+        tier: 'legendary',
+        reward: { fragments: [{ rarity: 'lendário', amount: 18 }] }
+      },
+      {
+        rewardType: 'fragments',
+        label: 'Fragmentos epicos',
+        weight: 12,
+        tier: 'epic',
+        reward: { fragments: [{ rarity: 'épico', amount: 30 }] }
+      },
+      {
+        rewardType: 'item',
+        label: 'Nucleos Ultra',
+        weight: 16,
+        tier: 'legendary',
+        reward: { ultraCores: 2 }
+      },
+      {
+        rewardType: 'crystals',
+        label: 'Cristais',
+        weight: 14,
+        tier: 'legendary',
+        reward: { crystals: 900 }
+      },
+      {
+        rewardType: 'coins',
+        label: 'Moedas',
+        weight: 12,
+        tier: 'epic',
+        reward: { coins: 18000 }
+      },
+      {
+        rewardType: 'potions',
+        label: 'Pocoes de nivel',
+        weight: 8,
+        tier: 'epic',
+        reward: { levelPotions: 80 }
+      }
     ]
   }
 };

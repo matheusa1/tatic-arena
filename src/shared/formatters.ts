@@ -1,5 +1,5 @@
-import { RewardBundle } from '../domain/entities/event';
-import { CHARACTER_SKIN_BY_ID } from '../domain/entities/characters';
+import type { RewardBundle } from '../domain/entities/event';
+import { CHARACTER_BY_ID, CHARACTER_SKIN_BY_ID } from '../domain/entities/characters';
 
 export function formatNumber(value: number) {
   return new Intl.NumberFormat('pt-BR').format(value);
@@ -27,7 +27,12 @@ export function describeReward(reward: RewardBundle) {
   if (reward.ultraCores) parts.push(`${reward.ultraCores} Nucleo Ultra Lendario`);
 
   reward.fragments?.forEach((fragment) => {
-    parts.push(`${fragment.amount} fragmentos ${fragment.rarity}`);
+    const character = fragment.characterId ? CHARACTER_BY_ID[fragment.characterId] : undefined;
+    parts.push(
+      character
+        ? `${fragment.amount} fragmentos de ${character.name}`
+        : `${fragment.amount} fragmentos ${fragment.rarity}`
+    );
   });
 
   if (reward.chests?.raro) parts.push(`${reward.chests.raro} bau raro`);

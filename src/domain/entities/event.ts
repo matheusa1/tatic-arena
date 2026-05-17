@@ -5,6 +5,7 @@ export type ChestType = 'raro' | 'épico' | 'lendário';
 export type FragmentReward = {
   rarity: Rarity;
   amount: number;
+  characterId?: string;
 };
 
 export type RewardBundle = {
