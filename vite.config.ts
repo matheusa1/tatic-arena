@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  base: '/n-online/',
+  base: '/tatic-arena/',
   plugins: [react()],
   test: {
     globals: true,
