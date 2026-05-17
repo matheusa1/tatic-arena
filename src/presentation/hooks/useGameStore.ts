@@ -14,8 +14,9 @@ import {
   Rarity,
   SkillSlot
 } from '../../domain/entities/character';
-import { RewardBundle } from '../../domain/entities/event';
-import { GameSnapshot } from '../../domain/entities/player';
+import type { ChestOpenResult } from '../../domain/entities/chest';
+import type { ChestType, RewardBundle } from '../../domain/entities/event';
+import type { GameSnapshot } from '../../domain/entities/player';
 import {
   FORMATION_TURN_ORDER,
   MAX_TEAM_MEMBERS,
@@ -51,6 +52,7 @@ import {
   upgradeWeapon as upgradeRosterWeapon
 } from '../../domain/services/characterService';
 import { runGacha } from '../../domain/services/gachaService';
+import { openChest as openLootChest } from '../../domain/services/chestService';
 import {
   claimMilestone,
   exchangeLuckyDiceShopItem,
@@ -80,6 +82,17 @@ type GachaActionResponse =
       message: string;
     };
 
+type ChestActionResponse =
+  | {
+      ok: true;
+      message: string;
+      result: ChestOpenResult;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
 type GameStore = GameSnapshot & {
   resetGame: () => void;
   toggleTeamMember: (characterId: string) => ActionResponse;
@@ -96,6 +109,7 @@ type GameStore = GameSnapshot & {
   rollLuckyDice: (paidWithCrystals: boolean) => ActionResponse;
   exchangeLuckyDiceItem: (itemId: string) => ActionResponse;
   buyEventPackage: (packageId: string, couponId?: string) => ActionResponse;
+  openChest: (chestType: ChestType) => ChestActionResponse;
   equipSkin: (characterId: string, skinId?: string) => ActionResponse;
   startBattle: () => ActionResponse;
   completeBattle: (report: BattleReport) => ActionResponse;
@@ -141,7 +155,9 @@ function applyReward(state: GameSnapshot, reward: RewardBundle): GameSnapshot {
   const skinIds = reward.skins?.map((skin) => skin.skinId).filter((skinId) => CHARACTER_SKIN_BY_ID[skinId]) ?? [];
 
   reward.fragments?.forEach((fragmentReward) => {
-    const target = selectRewardCharacter(fragmentReward.rarity);
+    const target =
+      (fragmentReward.characterId ? CHARACTER_BY_ID[fragmentReward.characterId] : undefined) ??
+      selectRewardCharacter(fragmentReward.rarity);
     roster = applyFragments(roster, CHARACTER_CATALOG, target.id, fragmentReward.amount).roster;
   });
 
@@ -740,6 +756,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'Erro ao comprar pacote.' };
     }
+  },
+
+  openChest: (chestType) => {
+    const state = get();
+    const availableChests = state.chests[chestType] ?? 0;
+
+    if (availableChests <= 0) {
+      return { ok: false, message: 'Nenhum bau desse tipo disponivel.' };
+    }
+
+    const result = openLootChest({
+      chestType,
+      catalog: CHARACTER_CATALOG
+    });
+    const stateAfterCost: GameSnapshot = {
+      ...state,
+      chests: {
+        ...state.chests,
+        [chestType]: availableChests - 1
+      }
+    };
+    const next = persist(applyReward(stateAfterCost, result.reward));
+    set(next);
+
+    return {
+      ok: true,
+      message: `Bau aberto: ${describeReward(result.reward)}.`,
+      result
+    };
   },
 
   equipSkin: (characterId, skinId) => {
