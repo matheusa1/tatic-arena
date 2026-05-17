@@ -34,6 +34,7 @@ import {
 import { buildCharacterProfiles, scaleStats } from '../../domain/services/characterService';
 import { formatNumber } from '../../shared/formatters';
 import { CharacterCard } from '../components/CharacterCard';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { PageHeader } from '../components/PageHeader';
 import { notifyAction, useGameStore } from '../hooks/useGameStore';
 
@@ -144,12 +145,14 @@ function CombatantCard({
   selected,
   selectable,
   animationRole,
+  onInspect,
   onSelect
 }: {
   unit: Combatant;
   selected: boolean;
   selectable: boolean;
   animationRole?: 'attack' | 'skill' | 'guard' | 'hit';
+  onInspect?: () => void;
   onSelect: () => void;
 }) {
   const dead = unit.currentHealth <= 0;
@@ -236,6 +239,17 @@ function CombatantCard({
             Energia {Math.min(2, unit.actionCount)}/2
           </Typography.Text>
         </Space>
+        {onInspect ? (
+          <Button
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              onInspect();
+            }}
+          >
+            Ver personagem
+          </Button>
+        ) : null}
       </Space>
     </Card>
   );
@@ -421,6 +435,7 @@ export function BattlePage() {
   const [selectedTargetId, setSelectedTargetId] = useState<string>();
   const [selectedAction, setSelectedAction] = useState<BattleActionType>('basic');
   const [battleAnimation, setBattleAnimation] = useState<BattleAnimation>();
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
   const profiles = buildCharacterProfiles(CHARACTER_CATALOG, roster);
   const teamProfiles = useMemo(
     () =>
@@ -473,6 +488,7 @@ export function BattlePage() {
       enemyTeam: createEnemyTeam()
     });
     const readyBattle = advanceBattleToNextPlayerTurn(nextBattle);
+    setSelectedCharacterId(undefined);
     setBattle(readyBattle);
     syncSelection(readyBattle);
     finishManualBattle(readyBattle);
@@ -492,12 +508,14 @@ export function BattlePage() {
       encounterType: 'ultra-boss'
     });
     const readyBattle = advanceBattleToNextPlayerTurn(nextBattle);
+    setSelectedCharacterId(undefined);
     setBattle(readyBattle);
     syncSelection(readyBattle);
     finishManualBattle(readyBattle);
   }
 
   function runAutomaticBattle() {
+    setSelectedCharacterId(undefined);
     setBattle(undefined);
     notifyAction(startBattle());
   }
@@ -577,7 +595,13 @@ export function BattlePage() {
           <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
             {teamProfiles.map((entry) => (
               <Col xs={24} md={8} key={entry.character.id}>
-                <CharacterCard character={entry.character} compact selected />
+                <CharacterCard
+                  character={entry.character}
+                  compact
+                  selected
+                  actionLabel="Ver personagem"
+                  onAction={() => setSelectedCharacterId(entry.character.id)}
+                />
               </Col>
             ))}
           </Row>
@@ -634,6 +658,9 @@ export function BattlePage() {
                               ? 'skill'
                               : 'attack'
                           : undefined
+                      }
+                      onInspect={
+                        battle.status === 'finished' ? () => setSelectedCharacterId(unit.characterId) : undefined
                       }
                       onSelect={() => undefined}
                     />
@@ -712,6 +739,20 @@ export function BattlePage() {
           ) : null}
         </>
       )}
+      {!battle ? (
+        <CharacterDetailsModal
+          characterId={selectedCharacterId}
+          open={Boolean(selectedCharacterId)}
+          onClose={() => setSelectedCharacterId(undefined)}
+        />
+      ) : null}
+      {battle?.status === 'finished' ? (
+        <CharacterDetailsModal
+          characterId={selectedCharacterId}
+          open={Boolean(selectedCharacterId)}
+          onClose={() => setSelectedCharacterId(undefined)}
+        />
+      ) : null}
     </>
   );
 }

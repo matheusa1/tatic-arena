@@ -10,6 +10,7 @@ import {
 import { CHARACTER_SKIN_BY_ID } from '../../domain/entities/characters';
 import { getCharacterPower, scaleStats } from '../../domain/services/characterService';
 import { RarityTag } from './RarityTag';
+import { SkillSummary } from './SkillSummary';
 
 type CharacterCardProps = {
   character: CharacterProfile;
@@ -123,17 +124,10 @@ export function CharacterCard({
             <Statistic title="Defesa" value={stats.defense} />
             <Statistic title="Vel." value={stats.speed} />
           </Space>
-          <Typography.Paragraph type="secondary" style={{ marginTop: 14, minHeight: 44 }}>
-            <strong>
-              {character.basicSkill.name} {formatSkillLevel(character.basicSkillLevel)}:
-            </strong>{' '}
-            {character.basicSkill.description}
-            <br />
-            <strong>
-              {character.specialSkill.name} {formatSkillLevel(character.specialSkillLevel)}:
-            </strong>{' '}
-            {character.specialSkill.description}
-          </Typography.Paragraph>
+          <div className="character-card-skill-list">
+            <SkillSummary skill={character.basicSkill} levelLabel={formatSkillLevel(character.basicSkillLevel)} />
+            <SkillSummary skill={character.specialSkill} levelLabel={formatSkillLevel(character.specialSkillLevel)} />
+          </div>
         </>
       ) : null}
 

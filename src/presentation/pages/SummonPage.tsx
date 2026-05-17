@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BannerId, GachaPullCount, GachaResult } from '../../domain/entities/gacha';
 import { GACHA_BANNERS } from '../../shared/constants';
 import { formatDate, formatNumber } from '../../shared/formatters';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { PageHeader } from '../components/PageHeader';
 import { RarityTag } from '../components/RarityTag';
 import { notifyAction, useGameStore } from '../hooks/useGameStore';
@@ -62,6 +63,7 @@ export function SummonPage() {
   const performGacha = useGameStore((store) => store.performGacha);
   const [lastResults, setLastResults] = useState<GachaResult[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
 
   function handleSummon(bannerId: BannerId, pulls: GachaPullCount) {
     const result = performGacha(bannerId, pulls);
@@ -110,7 +112,15 @@ export function SummonPage() {
             },
             {
               title: 'Personagem',
-              dataIndex: 'characterName'
+              dataIndex: 'characterName',
+              render: (_, row) => (
+                <Space wrap>
+                  <Typography.Text>{row.characterName}</Typography.Text>
+                  <Button size="small" onClick={() => setSelectedCharacterId(row.characterId)}>
+                    Ver
+                  </Button>
+                </Space>
+              )
             },
             {
               title: 'Raridade',
@@ -146,11 +156,19 @@ export function SummonPage() {
                 <Typography.Text strong>{item.characterName}</Typography.Text>
                 <Typography.Text>{item.fragments} fragmentos</Typography.Text>
                 {item.guaranteedByPity ? <Tag color="gold">pity</Tag> : null}
+                <Button size="small" onClick={() => setSelectedCharacterId(item.characterId)}>
+                  Ver
+                </Button>
               </Space>
             </List.Item>
           )}
         />
       </Modal>
+      <CharacterDetailsModal
+        characterId={selectedCharacterId}
+        open={Boolean(selectedCharacterId)}
+        onClose={() => setSelectedCharacterId(undefined)}
+      />
     </>
   );
 }

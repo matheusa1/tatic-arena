@@ -1,14 +1,17 @@
 import { Button, Card, Col, Modal, Progress, Row, Space, Statistic, Typography } from 'antd';
+import { useState } from 'react';
 import { CHARACTER_CATALOG, CHARACTER_SKIN_CATALOG } from '../../domain/entities/characters';
 import { buildCharacterProfiles, getCharacterPower } from '../../domain/services/characterService';
 import { getClaimableMilestones } from '../../domain/services/eventService';
 import { EVENT_CONFIG, EVENT_MILESTONES } from '../../shared/constants';
 import { formatNumber } from '../../shared/formatters';
 import { CharacterCard } from '../components/CharacterCard';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { PageHeader } from '../components/PageHeader';
 import { useGameStore } from '../hooks/useGameStore';
 
 export function DashboardPage() {
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
   const state = useGameStore();
   const resetGame = useGameStore((store) => store.resetGame);
   const profiles = buildCharacterProfiles(CHARACTER_CATALOG, state.roster);
@@ -118,10 +121,21 @@ export function DashboardPage() {
       <Row gutter={[16, 16]}>
         {teamProfiles.map((character) => (
           <Col xs={24} md={8} key={character.id}>
-            <CharacterCard character={character} selected compact />
+            <CharacterCard
+              character={character}
+              selected
+              compact
+              actionLabel="Ver personagem"
+              onAction={() => setSelectedCharacterId(character.id)}
+            />
           </Col>
         ))}
       </Row>
+      <CharacterDetailsModal
+        characterId={selectedCharacterId}
+        open={Boolean(selectedCharacterId)}
+        onClose={() => setSelectedCharacterId(undefined)}
+      />
     </>
   );
 }

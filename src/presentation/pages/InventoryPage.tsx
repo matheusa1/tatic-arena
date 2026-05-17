@@ -1,10 +1,13 @@
 import { Button, Card, Col, Empty, Row, Space, Statistic, Tag, Typography } from 'antd';
+import { useState } from 'react';
 import { CHARACTER_BY_ID, CHARACTER_SKIN_CATALOG } from '../../domain/entities/characters';
 import { formatNumber } from '../../shared/formatters';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { PageHeader } from '../components/PageHeader';
 import { notifyAction, useGameStore } from '../hooks/useGameStore';
 
 export function InventoryPage() {
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
   const state = useGameStore();
   const equipSkin = useGameStore((store) => store.equipSkin);
   const ownedSkinIds = new Set(state.skinInventory.ownedSkinIds);
@@ -105,6 +108,9 @@ export function InventoryPage() {
                   <Button block type="primary" disabled={!canEquip} onClick={() => notifyAction(equipSkin(skin.characterId, skin.id))}>
                     Equipar
                   </Button>
+                  <Button block disabled={!target || !character} onClick={() => setSelectedCharacterId(skin.characterId)}>
+                    Ver personagem
+                  </Button>
                 </Space>
               </Card>
             </Col>
@@ -116,6 +122,11 @@ export function InventoryPage() {
           <Empty description="Nenhuma skin cadastrada." />
         </Card>
       ) : null}
+      <CharacterDetailsModal
+        characterId={selectedCharacterId}
+        open={Boolean(selectedCharacterId)}
+        onClose={() => setSelectedCharacterId(undefined)}
+      />
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { DeleteOutlined, HolderOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EyeOutlined, HolderOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import type { DragEvent } from 'react';
 import { Alert, Button, Card, Empty, Space, Tag, Typography } from 'antd';
@@ -12,6 +12,7 @@ import {
 } from '../../domain/entities/formation';
 import { buildCharacterProfiles } from '../../domain/services/characterService';
 import { PageHeader } from '../components/PageHeader';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { RarityTag } from '../components/RarityTag';
 import { notifyAction, useGameStore } from '../hooks/useGameStore';
 
@@ -45,6 +46,7 @@ function getCharacterDragId(event: DragEvent) {
 export function FormationPage() {
   const [draggingCharacterId, setDraggingCharacterId] = useState<string>();
   const [dragOverSlot, setDragOverSlot] = useState<number>();
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
   const roster = useGameStore((store) => store.roster);
   const formation = useGameStore((store) => store.formation);
   const team = useGameStore((store) => store.team);
@@ -127,6 +129,17 @@ export function FormationPage() {
             Nv. {character.level} · {character.stars} estrela(s)
           </Typography.Text>
         </div>
+        <Button
+          aria-label={`Ver informacoes de ${character.name}`}
+          icon={<EyeOutlined />}
+          size="small"
+          type="text"
+          onClick={(event) => {
+            event.stopPropagation();
+            setSelectedCharacterId(character.id);
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+        />
         <HolderOutlined className="formation-token-handle" />
         {slot !== undefined ? (
           <Button
@@ -205,6 +218,11 @@ export function FormationPage() {
           </div>
         </div>
       </Card>
+      <CharacterDetailsModal
+        characterId={selectedCharacterId}
+        open={Boolean(selectedCharacterId)}
+        onClose={() => setSelectedCharacterId(undefined)}
+      />
     </>
   );
 }

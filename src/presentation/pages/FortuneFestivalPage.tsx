@@ -10,6 +10,7 @@ import {
 import { CHARACTER_BY_ID, CHARACTER_SKIN_BY_ID } from '../../domain/entities/characters';
 import { EVENT_CONFIG, EVENT_MILESTONES, EVENT_PACKAGES, LUCKY_DICE_CONFIG, LUCKY_DICE_SHOP_ITEMS } from '../../shared/constants';
 import { describeReward, formatDate, formatNumber } from '../../shared/formatters';
+import { CharacterDetailsModal } from '../components/CharacterDetailsModal';
 import { PageHeader } from '../components/PageHeader';
 import { notifyAction, useGameStore } from '../hooks/useGameStore';
 
@@ -21,6 +22,7 @@ export function FortuneFestivalPage() {
   const exchangeLuckyDiceItem = useGameStore((store) => store.exchangeLuckyDiceItem);
   const buyEventPackage = useGameStore((store) => store.buyEventPackage);
   const [couponByPackage, setCouponByPackage] = useState<Record<string, string | undefined>>({});
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
   const maxMilestone = EVENT_MILESTONES[EVENT_MILESTONES.length - 1].crystalsRequired;
   const progressPercent = Math.min(100, Math.round((state.event.crystalsSpent / maxMilestone) * 100));
   const claimable = getClaimableMilestones(state.event);
@@ -240,7 +242,12 @@ export function FortuneFestivalPage() {
                           ) : null}
                           <Typography.Paragraph type="secondary">{shopItem.description}</Typography.Paragraph>
                           {targetCharacter ? (
-                            <Typography.Text>Personagem: {targetCharacter.name}</Typography.Text>
+                            <Space wrap>
+                              <Typography.Text>Personagem: {targetCharacter.name}</Typography.Text>
+                              <Button size="small" onClick={() => setSelectedCharacterId(targetCharacter.id)}>
+                                Ver personagem
+                              </Button>
+                            </Space>
                           ) : null}
                           <Typography.Text>{describeReward(shopItem.reward)}</Typography.Text>
                           <Typography.Text>
@@ -351,6 +358,11 @@ export function FortuneFestivalPage() {
             )
           }
         ]}
+      />
+      <CharacterDetailsModal
+        characterId={selectedCharacterId}
+        open={Boolean(selectedCharacterId)}
+        onClose={() => setSelectedCharacterId(undefined)}
       />
     </>
   );
