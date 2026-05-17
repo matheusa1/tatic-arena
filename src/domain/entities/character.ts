@@ -12,8 +12,13 @@ export type StatBlock = {
 export type Skill = {
   name: string;
   description: string;
+  icon: SkillIcon;
+  effectType: SkillEffectType;
+  effect: string;
 };
 
+export type SkillIcon = 'strike' | 'blast' | 'heal' | 'guard' | 'control';
+export type SkillEffectType = 'damage' | 'heal' | 'guard' | 'control';
 export type SkillSlot = 'basic' | 'special';
 export type PetRole = 'ataque' | 'defesa' | 'suporte' | 'velocidade';
 export type PetStatGrowth = Partial<Record<keyof StatBlock, number>>;
