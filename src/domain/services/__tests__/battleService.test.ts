@@ -6,6 +6,8 @@ import {
   calculateBasicDamage,
   createInteractiveBattle,
   getActivePlayerActor,
+  getActiveTurnActor,
+  performEnemyBattleAction,
   performPlayerBattleAction,
   runAutoBattle
 } from '../battleService';
@@ -126,6 +128,46 @@ describe('battleService', () => {
     expect(next.turns).toBe(2);
     expect(next.enemyTeam[0].currentHealth).toBeLessThan(target.currentHealth);
     expect(next.logs.length).toBeGreaterThan(readyBattle.logs.length);
+  });
+
+  it('resolves one enemy turn at a time before returning control to the player', () => {
+    const player = [
+      {
+        id: 'player',
+        name: 'Aliado',
+        rarity: 'comum' as const,
+        element: 'fogo' as const,
+        class: 'atacante' as const,
+        level: 1,
+        stars: 1,
+        baseStats: { health: 1000, attack: 20, defense: 10, speed: 10 }
+      }
+    ];
+    const enemy = [
+      {
+        id: 'enemy',
+        name: 'Inimigo',
+        rarity: 'comum' as const,
+        element: 'terra' as const,
+        class: 'atacante' as const,
+        level: 1,
+        stars: 1,
+        baseStats: { health: 1000, attack: 100, defense: 10, speed: 50 }
+      }
+    ];
+    const battle = createInteractiveBattle({ playerTeam: player, enemyTeam: enemy });
+
+    expect(getActiveTurnActor(battle)?.team).toBe('enemy');
+
+    const result = performEnemyBattleAction({ battle, rng: () => 0 });
+
+    expect(result.performed).toBe(true);
+    expect(result.action).toBe('basic');
+    expect(result.actorInstanceId).toBe(battle.enemyTeam[0].instanceId);
+    expect(result.targetInstanceId).toBe(battle.playerTeam[0].instanceId);
+    expect(result.battle.turns).toBe(1);
+    expect(result.battle.playerTeam[0].currentHealth).toBeLessThan(player[0].baseStats.health);
+    expect(getActiveTurnActor(result.battle)?.team).toBe('player');
   });
 
   it('uses formation slots as the three team positions for manual turns', () => {

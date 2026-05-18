@@ -447,16 +447,33 @@ function chooseEnemyTarget(playerTeam: Combatant[], rng: Rng) {
   return wounded[0] ?? selectTarget(playerTeam, rng);
 }
 
-function performEnemyQueuedTurn(battle: InteractiveBattleState, actor: Combatant, rng: Rng) {
+export type EnemyTurnResolution = {
+  battle: InteractiveBattleState;
+  performed: boolean;
+  actorInstanceId?: string;
+  targetInstanceId?: string;
+  action?: BattleActionType;
+};
+
+function performEnemyQueuedTurn(battle: InteractiveBattleState, actor: Combatant, rng: Rng): EnemyTurnResolution {
+  const result: EnemyTurnResolution = {
+    battle,
+    performed: false,
+    actorInstanceId: actor.instanceId
+  };
+
   if (alive(battle.playerTeam).length === 0) {
-    return finishIfNeeded(battle);
+    return {
+      ...result,
+      battle: finishIfNeeded(battle)
+    };
   }
 
   battle.turns += 1;
   const action: BattleActionType = canUseSpecial(actor) ? 'special' : 'basic';
-  const target = chooseEnemyTarget(battle.playerTeam, rng);
-
-  performManualAction({
+  const target = requiresTarget(action, actor) ? chooseEnemyTarget(battle.playerTeam, rng) : undefined;
+  const controlled = actor.skipTurns > 0;
+  const actionDone = performManualAction({
     actor,
     allies: battle.enemyTeam,
     enemies: battle.playerTeam,
@@ -465,10 +482,27 @@ function performEnemyQueuedTurn(battle: InteractiveBattleState, actor: Combatant
     logs: battle.logs,
     rng
   });
+
+  if (!actionDone) {
+    battle.turns -= 1;
+    return {
+      ...result,
+      action,
+      targetInstanceId: target?.instanceId,
+      battle: finishIfNeeded(battle)
+    };
+  }
+
   advanceTurnQueue(battle, actor);
   tickBuffs([actor]);
 
-  return finishIfNeeded(battle);
+  return {
+    battle: finishIfNeeded(battle),
+    performed: true,
+    actorInstanceId: actor.instanceId,
+    targetInstanceId: controlled ? undefined : target?.instanceId,
+    action
+  };
 }
 
 export function advanceBattleToNextPlayerTurn(battle: InteractiveBattleState, rng: Rng = defaultRng) {
@@ -490,6 +524,43 @@ export function advanceBattleToNextPlayerTurn(battle: InteractiveBattleState, rn
   }
 
   return finishIfNeeded(next);
+}
+
+export function performEnemyBattleAction({
+  battle,
+  rng = defaultRng
+}: {
+  battle: InteractiveBattleState;
+  rng?: Rng;
+}): EnemyTurnResolution {
+  const next = cloneInteractiveBattle(battle);
+
+  if (next.status === 'finished') {
+    return {
+      battle: next,
+      performed: false
+    };
+  }
+
+  syncTurnQueue(next);
+  const actor = getActiveTurnActor(next);
+
+  if (!actor) {
+    return {
+      battle: finishIfNeeded(next),
+      performed: false
+    };
+  }
+
+  if (actor.team !== 'enemy') {
+    return {
+      battle: next,
+      performed: false,
+      actorInstanceId: actor.instanceId
+    };
+  }
+
+  return performEnemyQueuedTurn(next, actor, rng);
 }
 
 export function createInteractiveBattle({
