@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { Alert, Button, Card, Col, Empty, Progress, Row, Space, Tag, Typography } from 'antd';
 import type { CSSProperties } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BattleActionType, BattleCharacterInput, BattleReport, Combatant, InteractiveBattleState } from '../../domain/entities/battle';
 import { ULTRA_BOSS, ULTRA_BOSS_DROP_NAME, createUltraBossEnemyTeam } from '../../domain/entities/boss';
 import { CHARACTER_CATALOG, CHARACTER_SKIN_BY_ID } from '../../domain/entities/characters';
@@ -24,10 +24,11 @@ import {
   getFormationEntries
 } from '../../domain/entities/formation';
 import {
-  advanceBattleToNextPlayerTurn,
   canUseSpecial,
   createInteractiveBattle,
   getActivePlayerActor,
+  getActiveTurnActor,
+  performEnemyBattleAction,
   performPlayerBattleAction,
   toBattleReport
 } from '../../domain/services/battleService';
@@ -49,6 +50,9 @@ type TeamFormationProfile = {
   character: CharacterProfile;
   formationSlot: number;
 };
+
+const ENEMY_TURN_DELAY_MS = 1400;
+const ENEMY_TURN_PROGRESS_TICK_MS = 80;
 
 function toBattleInput({ character, formationSlot }: TeamFormationProfile): BattleCharacterInput {
   return {
@@ -436,6 +440,7 @@ export function BattlePage() {
   const [selectedAction, setSelectedAction] = useState<BattleActionType>('basic');
   const [battleAnimation, setBattleAnimation] = useState<BattleAnimation>();
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>();
+  const [enemyTurnProgress, setEnemyTurnProgress] = useState(0);
   const profiles = buildCharacterProfiles(CHARACTER_CATALOG, roster);
   const teamProfiles = useMemo(
     () =>
@@ -448,13 +453,22 @@ export function BattlePage() {
         .filter((entry): entry is TeamFormationProfile => Boolean(entry)),
     [formation, profiles, team]
   );
+  const activeActor = battle ? getActiveTurnActor(battle) : undefined;
+  const activeEnemy = activeActor?.team === 'enemy' ? activeActor : undefined;
+  const enemyTurnActive = Boolean(activeEnemy);
   const selectedActor = battle ? getActivePlayerActor(battle) : undefined;
   const selectedTarget = battle?.enemyTeam.find((unit) => unit.instanceId === selectedTargetId && unit.currentHealth > 0);
+  const queuedTurnActors = battle
+    ? battle.turnQueue
+        .map((instanceId) => [...battle.playerTeam, ...battle.enemyTeam].find((unit) => unit.instanceId === instanceId))
+        .filter((unit): unit is Combatant => Boolean(unit && unit.currentHealth > 0))
+    : [];
   const targetRequired = selectedActor ? actionNeedsTarget(selectedAction, selectedActor) : false;
   const specialReady = selectedActor ? canUseSpecial(selectedActor) : false;
   const canExecute =
     battle?.status === 'active' &&
     Boolean(selectedActor) &&
+    !enemyTurnActive &&
     (selectedAction !== 'special' || specialReady) &&
     (!targetRequired || Boolean(selectedTarget));
 
@@ -487,11 +501,10 @@ export function BattlePage() {
       playerTeam,
       enemyTeam: createEnemyTeam()
     });
-    const readyBattle = advanceBattleToNextPlayerTurn(nextBattle);
     setSelectedCharacterId(undefined);
-    setBattle(readyBattle);
-    syncSelection(readyBattle);
-    finishManualBattle(readyBattle);
+    setBattle(nextBattle);
+    syncSelection(nextBattle);
+    finishManualBattle(nextBattle);
   }
 
   function startBossBattle() {
@@ -507,11 +520,10 @@ export function BattlePage() {
       enemyTeam: createUltraBossEnemyTeam(),
       encounterType: 'ultra-boss'
     });
-    const readyBattle = advanceBattleToNextPlayerTurn(nextBattle);
     setSelectedCharacterId(undefined);
-    setBattle(readyBattle);
-    syncSelection(readyBattle);
-    finishManualBattle(readyBattle);
+    setBattle(nextBattle);
+    syncSelection(nextBattle);
+    finishManualBattle(nextBattle);
   }
 
   function runAutomaticBattle() {
@@ -550,16 +562,79 @@ export function BattlePage() {
       action: selectedAction,
       targetInstanceId: selectedTarget?.instanceId
     });
-    const readyBattle = advanceBattleToNextPlayerTurn(nextBattle);
 
     triggerBattleAnimation({
       actorId: selectedActor.instanceId,
       targetId: targetRequired ? selectedTarget?.instanceId : undefined,
       action: selectedAction
     });
-    setBattle(readyBattle);
-    syncSelection(readyBattle);
-    finishManualBattle(readyBattle);
+    setBattle(nextBattle);
+    syncSelection(nextBattle);
+    finishManualBattle(nextBattle);
+  }
+
+  useEffect(() => {
+    if (!battle || battle.status !== 'active') {
+      setEnemyTurnProgress(0);
+      return;
+    }
+
+    const enemyActor = getActiveTurnActor(battle);
+
+    if (!enemyActor || enemyActor.team !== 'enemy') {
+      setEnemyTurnProgress(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setEnemyTurnProgress(0);
+
+    const progressTimer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      setEnemyTurnProgress(Math.min(100, Math.round((elapsed / ENEMY_TURN_DELAY_MS) * 100)));
+    }, ENEMY_TURN_PROGRESS_TICK_MS);
+
+    const actionTimer = window.setTimeout(() => {
+      const result = performEnemyBattleAction({ battle });
+
+      if (result.performed && result.actorInstanceId && result.action) {
+        triggerBattleAnimation({
+          actorId: result.actorInstanceId,
+          targetId: result.targetInstanceId,
+          action: result.action
+        });
+      }
+
+      setBattle(result.battle);
+      syncSelection(result.battle);
+      finishManualBattle(result.battle);
+      setEnemyTurnProgress(0);
+    }, ENEMY_TURN_DELAY_MS);
+
+    return () => {
+      window.clearInterval(progressTimer);
+      window.clearTimeout(actionTimer);
+    };
+  }, [battle]);
+
+  function getAnimationRole(unit: Combatant): 'attack' | 'skill' | 'guard' | 'hit' | undefined {
+    if (unit.instanceId === battleAnimation?.targetId) {
+      return 'hit';
+    }
+
+    if (unit.instanceId !== battleAnimation?.actorId) {
+      return undefined;
+    }
+
+    if (battleAnimation.action === 'guard') {
+      return 'guard';
+    }
+
+    if (battleAnimation.action === 'special') {
+      return 'skill';
+    }
+
+    return 'attack';
   }
 
   const currentReport = battle?.status === 'finished' ? toBattleReport(battle) : undefined;
@@ -626,6 +701,8 @@ export function BattlePage() {
                   : battle.winner === 'enemy'
                     ? 'Derrota registrada'
                     : 'Empate registrado'
+                : activeEnemy
+                  ? 'Turno inimigo'
                 : battle.encounterType === 'ultra-boss'
                   ? 'Boss Ultra Max em andamento'
                   : 'Escolha sua jogada'
@@ -633,6 +710,8 @@ export function BattlePage() {
             description={
               battle.status === 'finished'
                 ? 'Inicie um novo encontro para lutar novamente.'
+                : activeEnemy
+                  ? `${activeEnemy.name} esta preparando a acao.`
                 : selectedActor
                   ? `${selectedActor.name} pronto para agir. ${specialDescription(selectedActor)}`
                   : 'Escolha um aliado vivo.'
@@ -650,15 +729,7 @@ export function BattlePage() {
                       unit={unit}
                       selectable={false}
                       selected={unit.instanceId === selectedActor?.instanceId}
-                      animationRole={
-                        unit.instanceId === battleAnimation?.actorId
-                          ? battleAnimation.action === 'guard'
-                            ? 'guard'
-                            : battleAnimation.action === 'special'
-                              ? 'skill'
-                              : 'attack'
-                          : undefined
-                      }
+                      animationRole={getAnimationRole(unit)}
                       onInspect={
                         battle.status === 'finished' ? () => setSelectedCharacterId(unit.characterId) : undefined
                       }
@@ -672,12 +743,28 @@ export function BattlePage() {
             <Col xs={24} lg={4}>
               <Card className="glass-card" title="Acao">
                 <Space direction="vertical" style={{ width: '100%' }}>
+                  <Typography.Text strong>{activeActor ? `Turno de ${activeActor.name}` : 'Fila vazia'}</Typography.Text>
+                  {queuedTurnActors.length > 0 ? (
+                    <Space wrap size={[4, 4]}>
+                      {queuedTurnActors.map((unit, index) => (
+                        <Tag key={unit.instanceId} color={unit.team === 'player' ? 'green' : 'red'}>
+                          {index === 0 ? 'Agora' : 'Depois'}: {unit.name}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : null}
+                  {activeEnemy ? (
+                    <>
+                      <Progress percent={enemyTurnProgress} size="small" status="active" showInfo={false} />
+                      <Typography.Text type="secondary">Inimigo executando...</Typography.Text>
+                    </>
+                  ) : null}
                   <Button
                     block
                     icon={<AimOutlined />}
                     type={selectedAction === 'basic' ? 'primary' : 'default'}
                     onClick={() => setSelectedAction('basic')}
-                    disabled={battle.status === 'finished'}
+                    disabled={battle.status === 'finished' || enemyTurnActive}
                   >
                     Ataque
                   </Button>
@@ -686,7 +773,7 @@ export function BattlePage() {
                     icon={<ThunderboltOutlined />}
                     type={selectedAction === 'special' ? 'primary' : 'default'}
                     onClick={() => setSelectedAction('special')}
-                    disabled={battle.status === 'finished' || !specialReady}
+                    disabled={battle.status === 'finished' || enemyTurnActive || !specialReady}
                   >
                     Habilidade
                   </Button>
@@ -695,7 +782,7 @@ export function BattlePage() {
                     icon={<SafetyCertificateOutlined />}
                     type={selectedAction === 'guard' ? 'primary' : 'default'}
                     onClick={() => setSelectedAction('guard')}
-                    disabled={battle.status === 'finished'}
+                    disabled={battle.status === 'finished' || enemyTurnActive}
                   >
                     Guarda
                   </Button>
@@ -713,9 +800,9 @@ export function BattlePage() {
                     <CombatantCard
                       key={unit.instanceId}
                       unit={unit}
-                      selectable={battle.status === 'active'}
-                      selected={unit.instanceId === selectedTargetId}
-                      animationRole={unit.instanceId === battleAnimation?.targetId ? 'hit' : undefined}
+                      selectable={battle.status === 'active' && !enemyTurnActive}
+                      selected={unit.instanceId === activeEnemy?.instanceId || (!activeEnemy && unit.instanceId === selectedTargetId)}
+                      animationRole={getAnimationRole(unit)}
                       onSelect={() => setSelectedTargetId(unit.instanceId)}
                     />
                   ))}
