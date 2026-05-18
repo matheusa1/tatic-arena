@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createUltraBossEnemyTeam } from '../../entities/boss';
+import { ULTRA_MAX_SKILL_LEVEL } from '../../entities/character';
 import { CHARACTER_CATALOG } from '../../entities/characters';
 import {
   advanceBattleToNextPlayerTurn,
   calculateBasicDamage,
+  canUseSpecial,
   createInteractiveBattle,
   getActivePlayerActor,
   getActiveTurnActor,
@@ -274,6 +276,75 @@ describe('battleService', () => {
     expect(firstCycleActors).toEqual(['D', 'A', 'B', 'C']);
   });
 
+  it('lets ultra boss minions take damage while protecting the boss', () => {
+    const player = [
+      {
+        id: 'player',
+        name: 'Campeao',
+        rarity: 'lendário' as const,
+        element: 'luz' as const,
+        class: 'atacante' as const,
+        level: 30,
+        stars: 6,
+        baseStats: { health: 5000, attack: 900, defense: 500, speed: 500 },
+        weaponLevel: 20,
+        basicSkillLevel: 10,
+        specialSkillLevel: 10
+      }
+    ];
+    const battle = createInteractiveBattle({
+      playerTeam: player,
+      enemyTeam: createUltraBossEnemyTeam(),
+      encounterType: 'ultra-boss'
+    });
+    const actor = getActivePlayerActor(battle)!;
+    const boss = battle.enemyTeam.find((unit) => unit.combatRole === 'boss')!;
+    const protectingMinion = battle.enemyTeam.find((unit) => unit.combatRole === 'minion' && unit.minionRole === 'tanker')!;
+
+    const next = performPlayerBattleAction({
+      battle,
+      actorInstanceId: actor.instanceId,
+      targetInstanceId: boss.instanceId,
+      action: 'basic',
+      rng: () => 0
+    });
+    const nextBoss = next.enemyTeam.find((unit) => unit.instanceId === boss.instanceId)!;
+    const nextProtectingMinion = next.enemyTeam.find((unit) => unit.instanceId === protectingMinion.instanceId)!;
+
+    expect(nextBoss.currentHealth).toBe(boss.currentHealth);
+    expect(nextProtectingMinion.currentHealth).toBeLessThan(protectingMinion.currentHealth);
+    expect(next.logs[0]).toContain('entrou na frente');
+  });
+
+  it('keeps summoned minions on basic attacks only', () => {
+    const battle = createInteractiveBattle({
+      playerTeam: [
+        {
+          id: 'player',
+          name: 'Aliado',
+          rarity: 'comum' as const,
+          element: 'fogo' as const,
+          class: 'atacante' as const,
+          level: 1,
+          stars: 1,
+          baseStats: { health: 1000, attack: 20, defense: 10, speed: 10 }
+        }
+      ],
+      enemyTeam: createUltraBossEnemyTeam(),
+      encounterType: 'ultra-boss'
+    });
+    const minion = battle.enemyTeam.find((unit) => unit.combatRole === 'minion')!;
+    const boss = battle.enemyTeam.find((unit) => unit.combatRole === 'boss')!;
+
+    minion.actionCount = 2;
+    boss.actionCount = 2;
+
+    expect(minion.basicOnly).toBe(true);
+    expect(canUseSpecial(minion)).toBe(false);
+    expect(boss.class).toBe('invocador');
+    expect(canUseSpecial(boss)).toBe(true);
+  });
+
   it('marks ultra boss encounters and drops an ultra core on victory', () => {
     const player = CHARACTER_CATALOG.slice(0, 3).map((character) => ({
       id: character.id,
@@ -304,5 +375,34 @@ describe('battleService', () => {
     expect(report.winner).toBe('player');
     expect(report.reward?.crystals).toBeGreaterThan(0);
     expect(report.reward?.ultraCores).toBe(1);
+  });
+
+  it('keeps the ultra boss fight meaningful for maximized legendary characters', () => {
+    const player = CHARACTER_CATALOG.filter((character) => character.rarity === 'lendário')
+      .slice(0, 3)
+      .map((character) => ({
+        id: character.id,
+        name: character.name,
+        rarity: character.rarity,
+        element: character.element,
+        class: character.class,
+        level: 30,
+        stars: 6,
+        baseStats: character.baseStats,
+        weaponLevel: 20,
+        basicSkillLevel: ULTRA_MAX_SKILL_LEVEL,
+        specialSkillLevel: ULTRA_MAX_SKILL_LEVEL
+      }));
+    const report = runAutoBattle({
+      playerTeam: player,
+      enemyTeam: createUltraBossEnemyTeam(),
+      encounterType: 'ultra-boss',
+      rng: () => 0
+    });
+
+    expect(report.winner).toBe('player');
+    expect(report.turns).toBeGreaterThan(10);
+    expect(report.turns).toBeLessThan(120);
+    expect(report.playerTeam.some((unit) => unit.currentHealth < unit.maxHealth)).toBe(true);
   });
 });

@@ -71,7 +71,11 @@ function toCombatant(input: BattleCharacterInput, team: BattleTeam, index: numbe
     turnPosition: index,
     actionCount: 0,
     defenseBuffTurns: 0,
-    skipTurns: 0
+    skipTurns: 0,
+    combatRole: input.combatRole,
+    minionRole: input.minionRole,
+    summonedById: input.summonedById,
+    basicOnly: input.basicOnly
   };
 }
 
@@ -92,6 +96,19 @@ function getPositionActor(team: Combatant[], position: number) {
   return team.find((unit) => unit.turnPosition === position && unit.currentHealth > 0);
 }
 
+function getTurnPositionCount(...teams: Combatant[][]) {
+  const maxTurnPosition = Math.max(
+    MAX_TEAM_MEMBERS - 1,
+    ...teams.flatMap((team) => team.map((unit) => unit.turnPosition))
+  );
+
+  return maxTurnPosition + 1;
+}
+
+function getBattleTurnPositionCount(battle: InteractiveBattleState) {
+  return getTurnPositionCount(battle.playerTeam, battle.enemyTeam);
+}
+
 function buildTurnQueueForPosition(battle: InteractiveBattleState, position: number) {
   return [
     getPositionActor(battle.playerTeam, position),
@@ -103,8 +120,10 @@ function buildTurnQueueForPosition(battle: InteractiveBattleState, position: num
 }
 
 function refillTurnQueue(battle: InteractiveBattleState, startPosition: number) {
-  for (let offset = 0; offset < MAX_TEAM_MEMBERS; offset += 1) {
-    const position = (startPosition + offset) % MAX_TEAM_MEMBERS;
+  const turnPositionCount = getBattleTurnPositionCount(battle);
+
+  for (let offset = 0; offset < turnPositionCount; offset += 1) {
+    const position = (startPosition + offset) % turnPositionCount;
     const turnQueue = buildTurnQueueForPosition(battle, position);
 
     if (turnQueue.length > 0) {
@@ -136,7 +155,7 @@ function advanceTurnQueue(battle: InteractiveBattleState, actor: Combatant) {
     return;
   }
 
-  refillTurnQueue(battle, (battle.turnPosition + 1) % MAX_TEAM_MEMBERS);
+  refillTurnQueue(battle, (battle.turnPosition + 1) % getBattleTurnPositionCount(battle));
 }
 
 export function getActiveTurnActor(battle: InteractiveBattleState) {
@@ -148,8 +167,10 @@ export function getActiveTurnActor(battle: InteractiveBattleState) {
     return queuedActor;
   }
 
-  for (let offset = 0; offset < MAX_TEAM_MEMBERS; offset += 1) {
-    const position = (battle.turnPosition + offset) % MAX_TEAM_MEMBERS;
+  const turnPositionCount = getBattleTurnPositionCount(battle);
+
+  for (let offset = 0; offset < turnPositionCount; offset += 1) {
+    const position = (battle.turnPosition + offset) % turnPositionCount;
     const turnQueue = buildTurnQueueForPosition(battle, position);
     const actor = turnQueue
       .map((instanceId) => getCombatantByInstanceId(battle, instanceId))
@@ -200,6 +221,80 @@ function applyDamage(target: Combatant, damage: number) {
   return reducedDamage;
 }
 
+const MINION_PROTECTION_PRIORITY = {
+  tanker: 0,
+  controlador: 1,
+  dps: 2
+};
+
+function getSummonedMinions(allies: Combatant[], summoner: Combatant) {
+  return allies.filter((unit) => unit.combatRole === 'minion' && unit.summonedById === summoner.characterId);
+}
+
+function getBossProtector(target: Combatant, enemies: Combatant[]) {
+  if (target.combatRole !== 'boss') {
+    return undefined;
+  }
+
+  return alive(enemies)
+    .filter((unit) => unit.combatRole === 'minion' && unit.summonedById === target.characterId)
+    .sort((a, b) => {
+      const aPriority = a.minionRole ? MINION_PROTECTION_PRIORITY[a.minionRole] : 99;
+      const bPriority = b.minionRole ? MINION_PROTECTION_PRIORITY[b.minionRole] : 99;
+
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return b.currentHealth / b.maxHealth - a.currentHealth / a.maxHealth;
+    })[0];
+}
+
+function resolveProtectedTarget(target: Combatant, enemies: Combatant[]) {
+  const protector = getBossProtector(target, enemies);
+
+  return {
+    target: protector ?? target,
+    protectedTarget: protector ? target : undefined
+  };
+}
+
+function reinforceSummons(actor: Combatant, allies: Combatant[]) {
+  const minions = getSummonedMinions(allies, actor);
+  const aliveMinions = alive(minions);
+  const fallenMinions = minions.filter((minion) => minion.currentHealth <= 0);
+
+  if (fallenMinions.length > 0) {
+    const reviveCount = aliveMinions.length === 0 ? fallenMinions.length : Math.min(2, fallenMinions.length);
+    const revived = fallenMinions.slice(0, reviveCount);
+
+    revived.forEach((minion) => {
+      minion.currentHealth = Math.max(1, Math.round(minion.maxHealth * 0.62));
+      minion.actionCount = 0;
+      minion.skipTurns = 0;
+      minion.defenseBuffTurns = minion.minionRole === 'tanker' ? 1 : 0;
+    });
+
+    return `${actor.name} invocou ${revived.map((minion) => minion.name).join(', ')} para recompor a linha de frente.`;
+  }
+
+  if (aliveMinions.length > 0) {
+    aliveMinions.forEach((minion) => {
+      minion.currentHealth = Math.min(minion.maxHealth, minion.currentHealth + Math.round(minion.maxHealth * 0.28));
+      minion.defenseBuffTurns = Math.max(minion.defenseBuffTurns, minion.minionRole === 'tanker' ? 2 : 1);
+    });
+    return `${actor.name} reforcou os minions invocados e manteve o boss protegido.`;
+  }
+
+  return `${actor.name} tentou invocar reforcos, mas a conexao foi quebrada.`;
+}
+
+function applyBasicAttackSideEffects(actor: Combatant, target: Combatant) {
+  if (actor.basicOnly && actor.minionRole === 'controlador') {
+    target.speed = Math.max(20, Math.round(target.speed * 0.94));
+    return ' e reduziu a velocidade';
+  }
+
+  return '';
+}
+
 function healLowestAlly(allies: Combatant[], amount: number) {
   const candidates = alive(allies).sort(
     (a, b) => a.currentHealth / a.maxHealth - b.currentHealth / b.maxHealth
@@ -227,25 +322,34 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
   }
 
   actor.actionCount += 1;
-  const useSpecial = actor.actionCount % 3 === 0;
+  const useSpecial = !actor.basicOnly && actor.actionCount % 3 === 0;
 
   if (!useSpecial) {
-    const target = selectTarget(enemies, rng);
+    const selectedTarget = selectTarget(enemies, rng);
+    const { target, protectedTarget } = resolveProtectedTarget(selectedTarget, enemies);
     const damage = applyDamage(
       target,
       calculateBasicDamage(actor.attack, target.defense, getSkillEffectMultiplier(actor.basicSkillLevel))
     );
-    logs.push(`${actor.name} atacou ${target.name} e causou ${damage} de dano.`);
+    const sideEffect = applyBasicAttackSideEffects(actor, target);
+    const targetDescription = protectedTarget
+      ? `${protectedTarget.name}, mas ${target.name} entrou na frente`
+      : target.name;
+    logs.push(`${actor.name} atacou ${targetDescription} e causou ${damage} de dano${sideEffect}.`);
     return;
   }
 
   if (actor.class === 'atacante') {
-    const target = selectTarget(enemies, rng);
+    const selectedTarget = selectTarget(enemies, rng);
+    const { target, protectedTarget } = resolveProtectedTarget(selectedTarget, enemies);
     const damage = applyDamage(
       target,
       calculateBasicDamage(actor.attack, target.defense, 1.75 * getSkillEffectMultiplier(actor.specialSkillLevel))
     );
-    logs.push(`${actor.name} usou especial ofensiva em ${target.name} e causou ${damage} de dano.`);
+    const targetDescription = protectedTarget
+      ? `${protectedTarget.name}, mas ${target.name} absorveu o impacto`
+      : target.name;
+    logs.push(`${actor.name} usou especial ofensiva em ${targetDescription} e causou ${damage} de dano.`);
     return;
   }
 
@@ -263,14 +367,23 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
     return;
   }
 
-  const target = selectTarget(enemies, rng);
+  if (actor.class === 'invocador') {
+    logs.push(reinforceSummons(actor, allies));
+    return;
+  }
+
+  const selectedTarget = selectTarget(enemies, rng);
+  const { target, protectedTarget } = resolveProtectedTarget(selectedTarget, enemies);
   const damage = applyDamage(
     target,
     calculateBasicDamage(actor.attack, target.defense, 0.85 * getSkillEffectMultiplier(actor.specialSkillLevel))
   );
   target.skipTurns += 1;
   target.speed = Math.max(20, Math.round(target.speed * getControlSpeedMultiplier(actor.specialSkillLevel)));
-  logs.push(`${actor.name} controlou ${target.name}, causou ${damage} de dano e atrasou a proxima acao.`);
+  const targetDescription = protectedTarget
+    ? `${protectedTarget.name}, mas ${target.name} recebeu o controle`
+    : target.name;
+  logs.push(`${actor.name} controlou ${targetDescription}, causou ${damage} de dano e atrasou a proxima acao.`);
 }
 
 function tickBuffs(units: Combatant[]) {
@@ -329,7 +442,7 @@ function finishIfNeeded(battle: InteractiveBattleState): InteractiveBattleState 
 }
 
 export function canUseSpecial(actor: Combatant) {
-  return actor.actionCount >= 2;
+  return !actor.basicOnly && actor.actionCount >= 2;
 }
 
 function chargeSpecial(actor: Combatant) {
@@ -385,23 +498,32 @@ function performManualAction({
   }
 
   if (action === 'basic' && target) {
+    const resolved = resolveProtectedTarget(target, enemies);
     const damage = applyDamage(
-      target,
-      calculateBasicDamage(actor.attack, target.defense, getSkillEffectMultiplier(actor.basicSkillLevel))
+      resolved.target,
+      calculateBasicDamage(actor.attack, resolved.target.defense, getSkillEffectMultiplier(actor.basicSkillLevel))
     );
+    const sideEffect = applyBasicAttackSideEffects(actor, resolved.target);
     chargeSpecial(actor);
-    logs.unshift(`${actor.name} atacou ${target.name} e causou ${damage} de dano.`);
+    const targetDescription = resolved.protectedTarget
+      ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} entrou na frente`
+      : resolved.target.name;
+    logs.unshift(`${actor.name} atacou ${targetDescription} e causou ${damage} de dano${sideEffect}.`);
     return true;
   }
 
   actor.actionCount = 0;
 
   if (actor.class === 'atacante' && target) {
+    const resolved = resolveProtectedTarget(target, enemies);
     const damage = applyDamage(
-      target,
-      calculateBasicDamage(actor.attack, target.defense, 1.95 * getSkillEffectMultiplier(actor.specialSkillLevel))
+      resolved.target,
+      calculateBasicDamage(actor.attack, resolved.target.defense, 1.95 * getSkillEffectMultiplier(actor.specialSkillLevel))
     );
-    logs.unshift(`${actor.name} detonou a habilidade ofensiva em ${target.name} e causou ${damage} de dano.`);
+    const targetDescription = resolved.protectedTarget
+      ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} absorveu o impacto`
+      : resolved.target.name;
+    logs.unshift(`${actor.name} detonou a habilidade ofensiva em ${targetDescription} e causou ${damage} de dano.`);
     return true;
   }
 
@@ -426,14 +548,23 @@ function performManualAction({
     return true;
   }
 
+  if (actor.class === 'invocador') {
+    logs.unshift(reinforceSummons(actor, allies));
+    return true;
+  }
+
   if (target) {
+    const resolved = resolveProtectedTarget(target, enemies);
     const damage = applyDamage(
-      target,
-      calculateBasicDamage(actor.attack, target.defense, 1.05 * getSkillEffectMultiplier(actor.specialSkillLevel))
+      resolved.target,
+      calculateBasicDamage(actor.attack, resolved.target.defense, 1.05 * getSkillEffectMultiplier(actor.specialSkillLevel))
     );
-    target.skipTurns += 1;
-    target.speed = Math.max(20, Math.round(target.speed * getControlSpeedMultiplier(actor.specialSkillLevel)));
-    logs.unshift(`${actor.name} travou ${target.name}, causou ${damage} de dano e atrasou a proxima acao.`);
+    resolved.target.skipTurns += 1;
+    resolved.target.speed = Math.max(20, Math.round(resolved.target.speed * getControlSpeedMultiplier(actor.specialSkillLevel)));
+    const targetDescription = resolved.protectedTarget
+      ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} recebeu o controle`
+      : resolved.target.name;
+    logs.unshift(`${actor.name} travou ${targetDescription}, causou ${damage} de dano e atrasou a proxima acao.`);
   }
 
   return true;
@@ -582,7 +713,7 @@ export function createInteractiveBattle({
     turns: 0,
     logs: [
       encounterType === 'ultra-boss'
-        ? 'Erebus Prime entrou em campo. O Nucleo Ultra Lendario esta em jogo.'
+        ? 'Erebus Prime entrou em campo e invocou uma linha de minions para proteger o Nucleo Ultra Lendario.'
         : 'Encontro iniciado. A formacao define o proximo aliado a agir.'
     ],
     playerTeam: orderBattleInputs(playerTeam).map((unit, index) => toCombatant(unit, 'player', index)),
@@ -684,9 +815,10 @@ export function runAutoBattle({
   const enemyCombatants = orderBattleInputs(enemyTeam).map((unit, index) => toCombatant(unit, 'enemy', index));
   const logs: string[] = [];
   let turns = 0;
+  const turnPositionCount = getTurnPositionCount(playerCombatants, enemyCombatants);
 
   while (alive(playerCombatants).length > 0 && alive(enemyCombatants).length > 0 && turns < 120) {
-    for (let position = 0; position < MAX_TEAM_MEMBERS; position += 1) {
+    for (let position = 0; position < turnPositionCount; position += 1) {
       const turnOrder = [
         getPositionActor(playerCombatants, position),
         getPositionActor(enemyCombatants, position)

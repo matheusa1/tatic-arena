@@ -1066,6 +1066,65 @@ body {
   box-shadow: 0 0 18px rgba(249, 115, 22, 0.42);
 }
 
+.combatant-card-minion.glass-card {
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(240, 253, 244, 0.96), rgba(236, 253, 245, 0.88)),
+    radial-gradient(circle at 90% 12%, rgba(34, 197, 94, 0.18), transparent 7rem) !important;
+  border-color: rgba(34, 197, 94, 0.38) !important;
+}
+
+.combatant-card-minion::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(90deg, rgba(21, 128, 61, 0.1), transparent 38%, rgba(14, 165, 233, 0.08));
+  border-radius: 8px;
+}
+
+.combatant-card-minion-tanker.glass-card {
+  border-color: rgba(37, 99, 235, 0.42) !important;
+}
+
+.combatant-card-minion-dps.glass-card {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+.combatant-card-minion-controlador.glass-card {
+  border-color: rgba(124, 58, 237, 0.4) !important;
+}
+
+.combatant-card-minion .ant-card-body {
+  position: relative;
+  z-index: 1;
+}
+
+.summoner-enemy-stage {
+  display: grid;
+  gap: 12px;
+}
+
+.summoner-minion-frontline {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+}
+
+.summoner-boss-backline {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin-top: -2px;
+}
+
+.summoner-boss-backline .combatant-card-boss {
+  transform: scale(0.98);
+  transform-origin: top center;
+}
+
 .boss-combatant-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

@@ -2,6 +2,8 @@ import { CharacterClass, CharacterPet, ElementType, Rarity, StatBlock } from './
 
 export type BattleTeam = 'player' | 'enemy';
 export type BattleEncounterType = 'standard' | 'ultra-boss';
+export type CombatantRole = 'boss' | 'minion';
+export type MinionRole = 'tanker' | 'dps' | 'controlador';
 
 export type Combatant = {
   instanceId: string;
@@ -26,6 +28,10 @@ export type Combatant = {
   actionCount: number;
   defenseBuffTurns: number;
   skipTurns: number;
+  combatRole?: CombatantRole;
+  minionRole?: MinionRole;
+  summonedById?: string;
+  basicOnly?: boolean;
 };
 
 export type BattleReward = {
@@ -79,4 +85,8 @@ export type BattleCharacterInput = {
   pet?: CharacterPet;
   equippedSkinId?: string;
   formationSlot?: number;
+  combatRole?: CombatantRole;
+  minionRole?: MinionRole;
+  summonedById?: string;
+  basicOnly?: boolean;
 };

@@ -1,6 +1,6 @@
 export type Rarity = 'comum' | 'raro' | 'épico' | 'lendário';
 export type ElementType = 'fogo' | 'água' | 'terra' | 'vento' | 'luz' | 'sombra';
-export type CharacterClass = 'atacante' | 'defensor' | 'suporte' | 'controlador';
+export type CharacterClass = 'atacante' | 'defensor' | 'suporte' | 'controlador' | 'invocador';
 
 export type StatBlock = {
   health: number;

@@ -10,7 +10,7 @@ import { Alert, Button, Card, Col, Empty, Progress, Row, Space, Tag, Typography 
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { BattleActionType, BattleCharacterInput, BattleReport, Combatant, InteractiveBattleState } from '../../domain/entities/battle';
-import { ULTRA_BOSS, ULTRA_BOSS_DROP_NAME, createUltraBossEnemyTeam } from '../../domain/entities/boss';
+import { MINION_ROLE_LABEL, ULTRA_BOSS, ULTRA_BOSS_DROP_NAME, createUltraBossEnemyTeam } from '../../domain/entities/boss';
 import { CHARACTER_CATALOG, CHARACTER_SKIN_BY_ID } from '../../domain/entities/characters';
 import {
   CharacterProfile,
@@ -129,7 +129,16 @@ function specialDescription(actor: Combatant | undefined) {
   if (actor.class === 'atacante') return 'Especial: dano alto em um inimigo.';
   if (actor.class === 'defensor') return 'Especial: cura leve e defesa reforcada.';
   if (actor.class === 'suporte') return 'Especial: cura o aliado mais ferido e limpa controle.';
+  if (actor.class === 'invocador') return 'Especial: invoca ou reforca minions para proteger o boss.';
   return 'Especial: dano, atraso e controle em um inimigo.';
+}
+
+function getDamagedEnemyId(before: InteractiveBattleState, after: InteractiveBattleState) {
+  return after.enemyTeam.find((unit) => {
+    const previous = before.enemyTeam.find((candidate) => candidate.instanceId === unit.instanceId);
+
+    return previous && unit.currentHealth < previous.currentHealth;
+  })?.instanceId;
 }
 
 function combatSkillLevelLabel(level: number) {
@@ -163,8 +172,9 @@ function CombatantCard({
   const hp = healthPercent(unit);
   const skin = unit.equippedSkinId ? CHARACTER_SKIN_BY_ID[unit.equippedSkinId] : undefined;
   const hasLegendarySkinAura = unit.rarity === 'lendário' && Boolean(skin);
-  const isBoss = unit.characterId === ULTRA_BOSS.id;
-  const selectedColor = isBoss ? '#f97316' : skin?.visual.primaryColor ?? '#f59e0b';
+  const isBoss = unit.combatRole === 'boss' || unit.characterId === ULTRA_BOSS.id;
+  const isMinion = unit.combatRole === 'minion';
+  const selectedColor = isBoss ? '#f97316' : isMinion ? '#22c55e' : skin?.visual.primaryColor ?? '#f59e0b';
   const skinStyle = skin
     ? ({
         '--skin-primary': skin.visual.primaryColor,
@@ -177,6 +187,7 @@ function CombatantCard({
     skin ? 'combatant-card-skinned' : '',
     hasLegendarySkinAura ? 'legendary-skin-aura' : '',
     isBoss ? 'combatant-card-boss' : '',
+    isMinion ? `combatant-card-minion combatant-card-minion-${unit.minionRole ?? 'generic'}` : '',
     animationRole ? `combatant-card-${animationRole}` : ''
   ]
     .filter(Boolean)
@@ -216,6 +227,8 @@ function CombatantCard({
         <Space wrap size={[4, 4]}>
           <Tag color={unit.team === 'player' ? 'green' : 'red'}>{unit.team === 'player' ? 'Aliado' : 'Inimigo'}</Tag>
           {isBoss ? <Tag color="gold">BOSS</Tag> : null}
+          {isMinion ? <Tag color="green">MINION {unit.minionRole ? MINION_ROLE_LABEL[unit.minionRole] : ''}</Tag> : null}
+          {isMinion ? <Tag color="lime">Protege boss</Tag> : null}
           <Tag>{unit.element}</Tag>
           <Tag>{unit.class}</Tag>
           <Tag color="geekblue">Posicao {unit.turnPosition + 1}</Tag>
@@ -240,7 +253,7 @@ function CombatantCard({
             HAB {combatSkillLevelLabel(unit.basicSkillLevel)}/{combatSkillLevelLabel(unit.specialSkillLevel)}
           </Typography.Text>
           <Typography.Text type={canUseSpecial(unit) ? 'success' : 'secondary'}>
-            Energia {Math.min(2, unit.actionCount)}/2
+            {unit.basicOnly ? 'Ataque basico' : `Energia ${Math.min(2, unit.actionCount)}/2`}
           </Typography.Text>
         </Space>
         {onInspect ? (
@@ -341,16 +354,17 @@ function UltraBossCard({
           <Space wrap size={[6, 6]}>
             <Tag color="gold">BOSS LENDARIO</Tag>
             <Tag color="volcano">RAID ULTRA</Tag>
+            <Tag color="green">INVOCADOR</Tag>
             <Tag color="purple">SOMBRA</Tag>
             <Tag color="cyan">DROP GARANTIDO</Tag>
           </Space>
           <Typography.Title level={2} className="ultra-boss-name">
             {ULTRA_BOSS.name}
           </Typography.Title>
-          <Typography.Text className="ultra-boss-subtitle">Arconte do ULTRA MAX</Typography.Text>
+          <Typography.Text className="ultra-boss-subtitle">Arconte invocador do ULTRA MAX</Typography.Text>
           <Typography.Paragraph className="ultra-boss-copy">
-            Um boss de fim de jogo feito para equipes no limite. Derrote Erebus Prime e obtenha o item
-            lendario que quebra o teto das habilidades: MAX vira ULTRA MAX.
+            Um boss de fim de jogo feito para equipes no limite. Erebus causa pouco dano direto, mas mantem
+            minions na frente dele: tanker, DPS e controlador absorvem golpes enquanto estiverem vivos.
           </Typography.Paragraph>
 
           <div className="ultra-boss-stat-grid">
@@ -463,6 +477,10 @@ export function BattlePage() {
         .map((instanceId) => [...battle.playerTeam, ...battle.enemyTeam].find((unit) => unit.instanceId === instanceId))
         .filter((unit): unit is Combatant => Boolean(unit && unit.currentHealth > 0))
     : [];
+  const hasSummonerBoss = Boolean(battle?.enemyTeam.some((unit) => unit.combatRole === 'boss'));
+  const enemyMinions = battle?.enemyTeam.filter((unit) => unit.combatRole === 'minion') ?? [];
+  const enemyBosses = battle?.enemyTeam.filter((unit) => unit.combatRole === 'boss') ?? [];
+  const regularEnemies = battle?.enemyTeam.filter((unit) => unit.combatRole !== 'minion' && unit.combatRole !== 'boss') ?? [];
   const targetRequired = selectedActor ? actionNeedsTarget(selectedAction, selectedActor) : false;
   const specialReady = selectedActor ? canUseSpecial(selectedActor) : false;
   const canExecute =
@@ -562,10 +580,11 @@ export function BattlePage() {
       action: selectedAction,
       targetInstanceId: selectedTarget?.instanceId
     });
+    const damagedEnemyId = getDamagedEnemyId(battle, nextBattle);
 
     triggerBattleAnimation({
       actorId: selectedActor.instanceId,
-      targetId: targetRequired ? selectedTarget?.instanceId : undefined,
+      targetId: targetRequired ? damagedEnemyId ?? selectedTarget?.instanceId : undefined,
       action: selectedAction
     });
     setBattle(nextBattle);
@@ -635,6 +654,19 @@ export function BattlePage() {
     }
 
     return 'attack';
+  }
+
+  function renderEnemyCombatantCard(unit: Combatant) {
+    return (
+      <CombatantCard
+        key={unit.instanceId}
+        unit={unit}
+        selectable={Boolean(battle?.status === 'active' && !enemyTurnActive)}
+        selected={unit.instanceId === activeEnemy?.instanceId || (!activeEnemy && unit.instanceId === selectedTargetId)}
+        animationRole={getAnimationRole(unit)}
+        onSelect={() => setSelectedTargetId(unit.instanceId)}
+      />
+    );
   }
 
   const currentReport = battle?.status === 'finished' ? toBattleReport(battle) : undefined;
@@ -795,18 +827,20 @@ export function BattlePage() {
 
             <Col xs={24} lg={10}>
               <Card className="glass-card" title="Inimigos">
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                  {battle.enemyTeam.map((unit) => (
-                    <CombatantCard
-                      key={unit.instanceId}
-                      unit={unit}
-                      selectable={battle.status === 'active' && !enemyTurnActive}
-                      selected={unit.instanceId === activeEnemy?.instanceId || (!activeEnemy && unit.instanceId === selectedTargetId)}
-                      animationRole={getAnimationRole(unit)}
-                      onSelect={() => setSelectedTargetId(unit.instanceId)}
-                    />
-                  ))}
-                </Space>
+                {hasSummonerBoss ? (
+                  <div className="summoner-enemy-stage">
+                    <div className="summoner-minion-frontline">
+                      {enemyMinions.map(renderEnemyCombatantCard)}
+                    </div>
+                    <div className="summoner-boss-backline">
+                      {[...enemyBosses, ...regularEnemies].map(renderEnemyCombatantCard)}
+                    </div>
+                  </div>
+                ) : (
+                  <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                    {battle.enemyTeam.map(renderEnemyCombatantCard)}
+                  </Space>
+                )}
               </Card>
             </Col>
           </Row>
