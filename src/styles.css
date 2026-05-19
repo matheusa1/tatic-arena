@@ -1042,6 +1042,220 @@ body {
     filter 160ms ease;
 }
 
+.combatant-card-with-pet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.combatant-card-with-pet-equipped.combatant-card-with-pet-player {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.combatant-card-with-pet-equipped.combatant-card-with-pet-enemy {
+  grid-template-columns: minmax(0, 1fr) 88px;
+}
+
+.combatant-card-main {
+  min-width: 0;
+}
+
+.combatant-card-main > .combatant-card {
+  height: 100%;
+}
+
+.combatant-pet-side-card {
+  position: relative;
+  display: grid;
+  min-height: 138px;
+  padding: 9px 7px;
+  overflow: hidden;
+  place-items: center;
+  align-content: center;
+  color: #172033;
+  text-align: center;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.82)),
+    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--pet-primary) 26%, transparent), transparent 5rem);
+  border: 1px solid color-mix(in srgb, var(--pet-primary) 42%, white);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.13),
+    0 0 0 1px rgba(255, 255, 255, 0.54) inset;
+}
+
+.combatant-pet-side-card::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(115deg, transparent 0 20%, color-mix(in srgb, var(--pet-secondary) 18%, transparent) 42%, transparent 64%),
+    radial-gradient(circle at 50% 8%, color-mix(in srgb, var(--pet-primary) 22%, transparent), transparent 42%);
+  animation: combatant-pet-glow 2.8s ease-in-out infinite;
+}
+
+.combatant-pet-side-card-player::after,
+.combatant-pet-side-card-enemy::after {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  content: '';
+  background: linear-gradient(180deg, transparent, var(--pet-primary), var(--pet-secondary), transparent);
+  border-radius: 999px;
+  opacity: 0.68;
+}
+
+.combatant-pet-side-card-player::after {
+  right: 0;
+}
+
+.combatant-pet-side-card-enemy::after {
+  left: 0;
+}
+
+.combatant-pet-orbit,
+.combatant-pet-avatar,
+.combatant-pet-kicker,
+.combatant-pet-name,
+.combatant-pet-meta,
+.combatant-pet-role {
+  position: relative;
+  z-index: 1;
+}
+
+.combatant-pet-orbit {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  width: 58px;
+  height: 58px;
+  border: 1px solid color-mix(in srgb, var(--pet-primary) 32%, transparent);
+  border-radius: 999px;
+  transform: translateX(-50%);
+  animation: combatant-pet-orbit 4.2s linear infinite;
+}
+
+.combatant-pet-orbit span {
+  position: absolute;
+  display: block;
+  width: 7px;
+  height: 7px;
+  background: var(--pet-secondary);
+  border-radius: 999px;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--pet-secondary) 72%, transparent);
+}
+
+.combatant-pet-orbit span:first-child {
+  top: -4px;
+  left: 23px;
+}
+
+.combatant-pet-orbit span:last-child {
+  right: 4px;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  background: var(--pet-primary);
+}
+
+.combatant-pet-avatar {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 8px;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.9), transparent 22%),
+    linear-gradient(145deg, var(--pet-primary), var(--pet-secondary));
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  box-shadow:
+    0 12px 20px color-mix(in srgb, var(--pet-primary) 26%, transparent),
+    0 0 18px color-mix(in srgb, var(--pet-secondary) 32%, transparent);
+  animation: combatant-pet-float 2.4s ease-in-out infinite;
+}
+
+.combatant-pet-avatar::before,
+.combatant-pet-avatar::after {
+  position: absolute;
+  top: 3px;
+  width: 15px;
+  height: 16px;
+  content: '';
+  background: linear-gradient(145deg, var(--pet-primary), var(--pet-secondary));
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 70% 70% 45% 45%;
+}
+
+.combatant-pet-avatar::before {
+  left: 3px;
+  transform: rotate(-28deg);
+}
+
+.combatant-pet-avatar::after {
+  right: 3px;
+  transform: rotate(28deg);
+}
+
+.combatant-pet-avatar span {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 6px rgba(15, 23, 42, 0.38);
+}
+
+.combatant-pet-kicker,
+.combatant-pet-role {
+  width: 100%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--pet-secondary) 74%, #172033);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.combatant-pet-name {
+  width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combatant-pet-meta {
+  width: 100%;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combatant-pet-role {
+  margin-top: 6px;
+  padding: 3px 5px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--pet-primary), var(--pet-secondary));
+  border-radius: 999px;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--pet-primary) 18%, transparent);
+}
+
 .combatant-card-skinned.glass-card {
   background:
     linear-gradient(
@@ -1919,6 +2133,37 @@ body {
   }
 }
 
+@keyframes combatant-pet-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.04);
+  }
+}
+
+@keyframes combatant-pet-orbit {
+  from {
+    transform: translateX(-50%) rotate(0deg);
+  }
+  to {
+    transform: translateX(-50%) rotate(360deg);
+  }
+}
+
+@keyframes combatant-pet-glow {
+  0%,
+  100% {
+    opacity: 0.52;
+    transform: translateX(-18%);
+  }
+  50% {
+    opacity: 0.92;
+    transform: translateX(18%);
+  }
+}
+
 @keyframes confetti-rise {
   0% {
     opacity: 0;
@@ -2054,6 +2299,55 @@ body {
   .ally-summoner-field {
     min-height: 0;
     padding-right: 0;
+  }
+
+  .combatant-card-with-pet {
+    gap: 8px;
+  }
+
+  .combatant-card-with-pet-equipped.combatant-card-with-pet-player {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+
+  .combatant-card-with-pet-equipped.combatant-card-with-pet-enemy {
+    grid-template-columns: minmax(0, 1fr) 68px;
+  }
+
+  .combatant-pet-side-card {
+    min-height: 124px;
+    padding: 8px 5px;
+  }
+
+  .combatant-pet-orbit {
+    top: 17px;
+    width: 48px;
+    height: 48px;
+  }
+
+  .combatant-pet-orbit span:first-child {
+    left: 19px;
+  }
+
+  .combatant-pet-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 10px;
+  }
+
+  .combatant-pet-avatar::before,
+  .combatant-pet-avatar::after {
+    width: 12px;
+    height: 13px;
+  }
+
+  .combatant-pet-kicker,
+  .combatant-pet-meta,
+  .combatant-pet-role {
+    font-size: 8px;
+  }
+
+  .combatant-pet-name {
+    font-size: 11px;
   }
 
   .ally-minion-dock {

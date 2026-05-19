@@ -22,6 +22,7 @@ import {
   CharacterProfile,
   MAX_SKILL_LEVEL,
   PET_BY_ID,
+  PetRole,
   ULTRA_MAX_SKILL_LEVEL,
   ULTRA_MAX_SKILL_STAT_BONUS
 } from '../../domain/entities/character';
@@ -57,8 +58,46 @@ type TeamFormationProfile = {
   formationSlot: number;
 };
 
+type CombatantAnimationRole = 'attack' | 'skill' | 'guard' | 'hit';
+
+type CombatantCardProps = {
+  unit: Combatant;
+  selected: boolean;
+  selectable: boolean;
+  animationRole?: CombatantAnimationRole;
+  onInspect?: () => void;
+  onSelect: () => void;
+};
+
 const ENEMY_TURN_DELAY_MS = 1400;
 const ENEMY_TURN_PROGRESS_TICK_MS = 80;
+
+const PET_ROLE_VISUALS: Record<PetRole, { label: string; mark: string; primary: string; secondary: string }> = {
+  ataque: {
+    label: 'Ataque',
+    mark: 'AT',
+    primary: '#f97316',
+    secondary: '#dc2626'
+  },
+  defesa: {
+    label: 'Defesa',
+    mark: 'DF',
+    primary: '#2563eb',
+    secondary: '#0f766e'
+  },
+  suporte: {
+    label: 'Suporte',
+    mark: 'SP',
+    primary: '#16a34a',
+    secondary: '#0891b2'
+  },
+  velocidade: {
+    label: 'Vel.',
+    mark: 'VL',
+    primary: '#7c3aed',
+    secondary: '#0ea5e9'
+  }
+};
 
 function toBattleInput({ character, formationSlot }: TeamFormationProfile): BattleCharacterInput {
   return {
@@ -159,6 +198,64 @@ function combatSkillLevelLabel(level: number) {
   return String(level);
 }
 
+function CombatantPetSideCard({ unit }: { unit: Combatant }) {
+  const pet = unit.pet ? PET_BY_ID[unit.pet.id] : undefined;
+
+  if (!unit.pet || !pet) {
+    return null;
+  }
+
+  const visual = PET_ROLE_VISUALS[pet.role];
+  const sideLabel = unit.team === 'player' ? 'Pet aliado' : 'Pet inimigo';
+  const petStyle = {
+    '--pet-primary': visual.primary,
+    '--pet-secondary': visual.secondary
+  } as CSSProperties;
+
+  return (
+    <aside
+      className={`combatant-pet-side-card combatant-pet-side-card-${unit.team} combatant-pet-side-card-${pet.role}`}
+      style={petStyle}
+      aria-hidden="true"
+    >
+      <span className="combatant-pet-orbit">
+        <span />
+        <span />
+      </span>
+      <span className="combatant-pet-avatar">
+        <span>{visual.mark}</span>
+      </span>
+      <span className="combatant-pet-kicker">{sideLabel}</span>
+      <strong className="combatant-pet-name">{pet.name}</strong>
+      <span className="combatant-pet-meta">
+        Nv. {unit.pet.level} / Vinc. {unit.pet.bond}
+      </span>
+      <span className="combatant-pet-role">{visual.label}</span>
+    </aside>
+  );
+}
+
+function CombatantCardWithPet(props: CombatantCardProps) {
+  const hasPet = Boolean(props.unit.pet && PET_BY_ID[props.unit.pet.id]);
+  const className = [
+    'combatant-card-with-pet',
+    `combatant-card-with-pet-${props.unit.team}`,
+    hasPet ? 'combatant-card-with-pet-equipped' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <div className={className}>
+      {props.unit.team === 'player' ? <CombatantPetSideCard unit={props.unit} /> : null}
+      <div className="combatant-card-main">
+        <CombatantCard {...props} />
+      </div>
+      {props.unit.team === 'enemy' ? <CombatantPetSideCard unit={props.unit} /> : null}
+    </div>
+  );
+}
+
 function CombatantCard({
   unit,
   selected,
@@ -166,14 +263,7 @@ function CombatantCard({
   animationRole,
   onInspect,
   onSelect
-}: {
-  unit: Combatant;
-  selected: boolean;
-  selectable: boolean;
-  animationRole?: 'attack' | 'skill' | 'guard' | 'hit';
-  onInspect?: () => void;
-  onSelect: () => void;
-}) {
+}: CombatantCardProps) {
   const dead = unit.currentHealth <= 0;
   const hp = healthPercent(unit);
   const skin = unit.equippedSkinId ? CHARACTER_SKIN_BY_ID[unit.equippedSkinId] : undefined;
@@ -694,7 +784,7 @@ export function BattlePage() {
     };
   }, [battle]);
 
-  function getAnimationRole(unit: Combatant): 'attack' | 'skill' | 'guard' | 'hit' | undefined {
+  function getAnimationRole(unit: Combatant): CombatantAnimationRole | undefined {
     if (unit.instanceId === battleAnimation?.targetId) {
       return 'hit';
     }
@@ -716,7 +806,7 @@ export function BattlePage() {
 
   function renderEnemyCombatantCard(unit: Combatant) {
     return (
-      <CombatantCard
+      <CombatantCardWithPet
         key={unit.instanceId}
         unit={unit}
         selectable={Boolean(battle?.status === 'active' && !enemyTurnActive)}
@@ -749,7 +839,7 @@ export function BattlePage() {
     return (
       <div className="ally-summoner-field" key={unit.instanceId}>
         <div className="ally-summoner-main">
-          <CombatantCard
+          <CombatantCardWithPet
             unit={unit}
             selectable={false}
             selected={unit.instanceId === selectedActor?.instanceId}
