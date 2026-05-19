@@ -74,6 +74,7 @@ export function CharacterCard({
         'glass-card',
         'hero-card',
         skin ? 'hero-card-skinned' : '',
+        skin ? `character-skin-${skin.id}` : '',
         hasLegendarySkinAura ? 'legendary-skin-aura' : ''
       ]
         .filter(Boolean)

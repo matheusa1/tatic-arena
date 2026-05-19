@@ -10,7 +10,13 @@ import { Alert, Button, Card, Col, Empty, Progress, Row, Space, Tag, Typography 
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { BattleActionType, BattleCharacterInput, BattleReport, Combatant, InteractiveBattleState } from '../../domain/entities/battle';
-import { MINION_ROLE_LABEL, ULTRA_BOSS, ULTRA_BOSS_DROP_NAME, createUltraBossEnemyTeam } from '../../domain/entities/boss';
+import {
+  MAX_SUMMONED_MINIONS,
+  MINION_ROLE_LABEL,
+  ULTRA_BOSS,
+  ULTRA_BOSS_DROP_NAME,
+  createUltraBossEnemyTeam
+} from '../../domain/entities/boss';
 import { CHARACTER_CATALOG, CHARACTER_SKIN_BY_ID } from '../../domain/entities/characters';
 import {
   CharacterProfile,
@@ -129,7 +135,7 @@ function specialDescription(actor: Combatant | undefined) {
   if (actor.class === 'atacante') return 'Especial: dano alto em um inimigo.';
   if (actor.class === 'defensor') return 'Especial: cura leve e defesa reforcada.';
   if (actor.class === 'suporte') return 'Especial: cura o aliado mais ferido e limpa controle.';
-  if (actor.class === 'invocador') return 'Especial: invoca ou reforca minions para proteger o boss.';
+  if (actor.class === 'invocador') return 'Especial: invoca ou reforca minions aliados.';
   return 'Especial: dano, atraso e controle em um inimigo.';
 }
 
@@ -174,6 +180,7 @@ function CombatantCard({
   const hasLegendarySkinAura = unit.rarity === 'lendário' && Boolean(skin);
   const isBoss = unit.combatRole === 'boss' || unit.characterId === ULTRA_BOSS.id;
   const isMinion = unit.combatRole === 'minion';
+  const protectsBoss = isMinion && unit.summonedById === ULTRA_BOSS.id;
   const selectedColor = isBoss ? '#f97316' : isMinion ? '#22c55e' : skin?.visual.primaryColor ?? '#f59e0b';
   const skinStyle = skin
     ? ({
@@ -185,6 +192,7 @@ function CombatantCard({
     'glass-card',
     'combatant-card',
     skin ? 'combatant-card-skinned' : '',
+    skin ? `character-skin-${skin.id}` : '',
     hasLegendarySkinAura ? 'legendary-skin-aura' : '',
     isBoss ? 'combatant-card-boss' : '',
     isMinion ? `combatant-card-minion combatant-card-minion-${unit.minionRole ?? 'generic'}` : '',
@@ -228,10 +236,10 @@ function CombatantCard({
           <Tag color={unit.team === 'player' ? 'green' : 'red'}>{unit.team === 'player' ? 'Aliado' : 'Inimigo'}</Tag>
           {isBoss ? <Tag color="gold">BOSS</Tag> : null}
           {isMinion ? <Tag color="green">MINION {unit.minionRole ? MINION_ROLE_LABEL[unit.minionRole] : ''}</Tag> : null}
-          {isMinion ? <Tag color="lime">Protege boss</Tag> : null}
+          {protectsBoss ? <Tag color="lime">Protege boss</Tag> : null}
           <Tag>{unit.element}</Tag>
           <Tag>{unit.class}</Tag>
-          <Tag color="geekblue">Posicao {unit.turnPosition + 1}</Tag>
+          {unit.occupiesSlot ? <Tag color="geekblue">Posicao {unit.turnPosition + 1}</Tag> : <Tag color="lime">Invocacao</Tag>}
           <Tag>Arma {unit.weaponLevel}</Tag>
           {unit.pet ? <Tag color="cyan">Pet {PET_BY_ID[unit.pet.id]?.name ?? unit.pet.id}</Tag> : null}
           {skin ? <Tag color="gold">{skin.name}</Tag> : null}
@@ -269,6 +277,55 @@ function CombatantCard({
         ) : null}
       </Space>
     </Card>
+  );
+}
+
+function SummonedMinionSubcard({
+  unit,
+  selected,
+  selectable,
+  animationRole,
+  onSelect
+}: {
+  unit: Combatant;
+  selected: boolean;
+  selectable: boolean;
+  animationRole?: 'attack' | 'skill' | 'guard' | 'hit';
+  onSelect: () => void;
+}) {
+  const dead = unit.currentHealth <= 0;
+  const hp = healthPercent(unit);
+  const roleLabel = unit.minionRole ? MINION_ROLE_LABEL[unit.minionRole] : 'Invocacao';
+  const className = [
+    'summoned-minion-subcard',
+    `summoned-minion-subcard-${unit.minionRole ?? 'generic'}`,
+    selected ? 'summoned-minion-subcard-selected' : '',
+    dead ? 'summoned-minion-subcard-dead' : '',
+    animationRole ? `combatant-card-${animationRole}` : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={selectable && !dead ? onSelect : undefined}
+      disabled={!selectable || dead}
+      aria-pressed={selected}
+    >
+      <span className="summoned-minion-role">{roleLabel}</span>
+      <strong className="summoned-minion-name">{unit.name}</strong>
+      <Progress
+        percent={hp}
+        size="small"
+        status={hp <= 25 ? 'exception' : 'active'}
+        showInfo={false}
+      />
+      <span className="summoned-minion-health">
+        {unit.currentHealth}/{unit.maxHealth}
+      </span>
+    </button>
   );
 }
 
@@ -478,7 +535,8 @@ export function BattlePage() {
         .filter((unit): unit is Combatant => Boolean(unit && unit.currentHealth > 0))
     : [];
   const hasSummonerBoss = Boolean(battle?.enemyTeam.some((unit) => unit.combatRole === 'boss'));
-  const enemyMinions = battle?.enemyTeam.filter((unit) => unit.combatRole === 'minion') ?? [];
+  const playerCombatants = battle?.playerTeam.filter((unit) => unit.combatRole !== 'minion') ?? [];
+  const enemyMinions = battle?.enemyTeam.filter((unit) => unit.combatRole === 'minion').slice(0, MAX_SUMMONED_MINIONS) ?? [];
   const enemyBosses = battle?.enemyTeam.filter((unit) => unit.combatRole === 'boss') ?? [];
   const regularEnemies = battle?.enemyTeam.filter((unit) => unit.combatRole !== 'minion' && unit.combatRole !== 'boss') ?? [];
   const targetRequired = selectedActor ? actionNeedsTarget(selectedAction, selectedActor) : false;
@@ -669,6 +727,57 @@ export function BattlePage() {
     );
   }
 
+  function renderEnemyMinionSubcard(unit: Combatant) {
+    return (
+      <SummonedMinionSubcard
+        key={unit.instanceId}
+        unit={unit}
+        selectable={Boolean(battle?.status === 'active' && !enemyTurnActive)}
+        selected={unit.instanceId === activeEnemy?.instanceId || (!activeEnemy && unit.instanceId === selectedTargetId)}
+        animationRole={getAnimationRole(unit)}
+        onSelect={() => setSelectedTargetId(unit.instanceId)}
+      />
+    );
+  }
+
+  function renderPlayerCombatantField(unit: Combatant) {
+    const summonedMinions =
+      battle?.playerTeam
+        .filter((minion) => minion.combatRole === 'minion' && minion.summonedById === unit.characterId)
+        .slice(0, MAX_SUMMONED_MINIONS) ?? [];
+
+    return (
+      <div className="ally-summoner-field" key={unit.instanceId}>
+        <div className="ally-summoner-main">
+          <CombatantCard
+            unit={unit}
+            selectable={false}
+            selected={unit.instanceId === selectedActor?.instanceId}
+            animationRole={getAnimationRole(unit)}
+            onInspect={
+              battle?.status === 'finished' ? () => setSelectedCharacterId(unit.characterId) : undefined
+            }
+            onSelect={() => undefined}
+          />
+        </div>
+        {summonedMinions.length > 0 ? (
+          <div className="ally-minion-dock">
+            {summonedMinions.map((minion) => (
+              <SummonedMinionSubcard
+                key={minion.instanceId}
+                unit={minion}
+                selectable={false}
+                selected={false}
+                animationRole={getAnimationRole(minion)}
+                onSelect={() => undefined}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   const currentReport = battle?.status === 'finished' ? toBattleReport(battle) : undefined;
 
   return (
@@ -754,21 +863,9 @@ export function BattlePage() {
           <Row gutter={[16, 16]}>
             <Col xs={24} lg={10}>
               <Card className="glass-card" title="Aliados">
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                  {battle.playerTeam.map((unit) => (
-                    <CombatantCard
-                      key={unit.instanceId}
-                      unit={unit}
-                      selectable={false}
-                      selected={unit.instanceId === selectedActor?.instanceId}
-                      animationRole={getAnimationRole(unit)}
-                      onInspect={
-                        battle.status === 'finished' ? () => setSelectedCharacterId(unit.characterId) : undefined
-                      }
-                      onSelect={() => undefined}
-                    />
-                  ))}
-                </Space>
+                <div className="ally-summoner-stage">
+                  {playerCombatants.map(renderPlayerCombatantField)}
+                </div>
               </Card>
             </Col>
 
@@ -829,12 +926,21 @@ export function BattlePage() {
               <Card className="glass-card" title="Inimigos">
                 {hasSummonerBoss ? (
                   <div className="summoner-enemy-stage">
-                    <div className="summoner-minion-frontline">
-                      {enemyMinions.map(renderEnemyCombatantCard)}
+                    <div className="summoner-boss-field">
+                      {enemyMinions.length > 0 ? (
+                        <div className="summoner-minion-dock">
+                          {enemyMinions.map(renderEnemyMinionSubcard)}
+                        </div>
+                      ) : null}
+                      <div className="summoner-boss-main">
+                        {enemyBosses.map(renderEnemyCombatantCard)}
+                      </div>
                     </div>
-                    <div className="summoner-boss-backline">
-                      {[...enemyBosses, ...regularEnemies].map(renderEnemyCombatantCard)}
-                    </div>
+                    {regularEnemies.length > 0 ? (
+                      <div className="summoner-boss-backline">
+                        {regularEnemies.map(renderEnemyCombatantCard)}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <Space direction="vertical" size="middle" style={{ width: '100%' }}>

@@ -129,7 +129,16 @@ export function CharacterDetailsModal({ characterId, open, onClose }: CharacterD
       width={920}
       footer={<Button onClick={onClose}>Fechar</Button>}
     >
-      <div className={skin ? 'character-detail character-detail-skinned' : 'character-detail'} style={skinStyle}>
+      <div
+        className={[
+          'character-detail',
+          skin ? 'character-detail-skinned' : '',
+          skin ? `character-skin-${skin.id}` : ''
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        style={skinStyle}
+      >
         <div className="character-detail-header">
           <div
             className={`character-avatar character-detail-avatar rarity-${character.rarity}`}
