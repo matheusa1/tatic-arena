@@ -31,6 +31,8 @@ import { BattleCharacterInput, BattleReport, BattleReward } from '../../domain/e
 import {
   clearGameState,
   createInitialGameState,
+  exportGameState,
+  importGameState,
   loadGameState,
   saveGameState
 } from '../../data/repositories/localStorageRepository';
@@ -111,6 +113,8 @@ type GameStore = GameSnapshot & {
   buyEventPackage: (packageId: string, couponId?: string) => ActionResponse;
   openChest: (chestType: ChestType) => ChestActionResponse;
   equipSkin: (characterId: string, skinId?: string) => ActionResponse;
+  exportSave: () => string;
+  importSave: (saveText: string) => ActionResponse;
   startBattle: () => ActionResponse;
   completeBattle: (report: BattleReport) => ActionResponse;
 };
@@ -262,6 +266,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     clearGameState();
     saveGameState(next);
     set(next);
+  },
+
+  exportSave: () => exportGameState(toSnapshot(get())),
+
+  importSave: (saveText) => {
+    const importedState = importGameState(saveText);
+
+    if (!importedState) {
+      return { ok: false, message: 'Save invalido ou incompatível.' };
+    }
+
+    const next = persist(importedState);
+    set(next);
+
+    return { ok: true, message: 'Save importado com sucesso.' };
   },
 
   toggleTeamMember: (characterId) => {
