@@ -1,5 +1,6 @@
 import {
   AimOutlined,
+  DeploymentUnitOutlined,
   ExperimentOutlined,
   HeartOutlined,
   SafetyCertificateOutlined,
@@ -18,14 +19,16 @@ const EFFECT_LABEL: Record<SkillEffectType, string> = {
   damage: 'Dano',
   heal: 'Cura',
   guard: 'Defesa',
-  control: 'Controle'
+  control: 'Controle',
+  summon: 'Invocacao'
 };
 
 const EFFECT_TAG_COLOR: Record<SkillEffectType, string> = {
   damage: 'volcano',
   heal: 'green',
   guard: 'blue',
-  control: 'purple'
+  control: 'purple',
+  summon: 'cyan'
 };
 
 function renderSkillIcon(icon: SkillIcon): ReactNode {
@@ -33,6 +36,7 @@ function renderSkillIcon(icon: SkillIcon): ReactNode {
   if (icon === 'heal') return <HeartOutlined />;
   if (icon === 'guard') return <SafetyCertificateOutlined />;
   if (icon === 'control') return <ExperimentOutlined />;
+  if (icon === 'summon') return <DeploymentUnitOutlined />;
 
   return <AimOutlined />;
 }

@@ -297,6 +297,14 @@ export const LUCKY_DICE_SHOP_ITEMS: LuckyDiceShopItem[] = [
     limit: 1
   },
   {
+    id: 'skin-ciro-lighthouse-armada',
+    name: 'Skin Armada do Farol',
+    description: 'Visual lendario exclusivo para Ciro Farol.',
+    pointCost: 900,
+    reward: { skins: [{ skinId: 'ciro-lighthouse-armada' }] },
+    limit: 1
+  },
+  {
     id: 'dice-legendary-fragments',
     name: 'Fragmentos Lendarios',
     description: 'Fragmentos extras para acelerar lendarios fora das skins.',

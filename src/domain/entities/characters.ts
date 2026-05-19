@@ -378,25 +378,25 @@ export const CHARACTER_CATALOG: CharacterTemplate[] = [
   {
     id: 'beacon-keeper',
     name: 'Ciro Farol',
-    rarity: 'épico',
+    rarity: 'lendário',
     element: 'luz',
-    class: 'suporte',
-    baseStats: { health: 1120, attack: 132, defense: 82, speed: 124 },
+    class: 'invocador',
+    baseStats: { health: 1360, attack: 214, defense: 104, speed: 132 },
     basicSkill: {
-      name: 'Centelha Guia',
-      description: 'Ciro marca o inimigo com uma centelha dourada que encontra o caminho mais curto até a defesa.',
-      icon: 'blast',
-      effectType: 'damage',
-      effect: 'Dano de alvo único com escala pelo nível da habilidade básica.'
+      name: 'Frota de Sinal',
+      description: 'Ciro acende o farol e abre uma rota luminosa para navios etéreos cruzarem a linha inimiga.',
+      icon: 'summon',
+      effectType: 'summon',
+      effect: 'Ataque básico de alvo único que invoca uma fragata aliada. Navios aliados atacam aleatoriamente após Ciro agir.'
     },
     specialSkill: {
-      name: 'Farol de Retorno',
-      description: 'O farol nas costas de Ciro acende e chama o aliado mais ferido de volta ao eixo da luta.',
-      icon: 'heal',
-      effectType: 'heal',
-      effect: 'Cura grande no aliado com menor vida; no modo manual também limpa controle.'
+      name: 'Couracado do Horizonte',
+      description: 'O farol rasga o horizonte e convoca um navio de guerra dourado para liderar a frota.',
+      icon: 'summon',
+      effectType: 'summon',
+      effect: 'Invoca um navio de guerra com ataque alto. Se a frota estiver cheia, reforca o couracado existente.'
     },
-    requiredFragments: FRAGMENTS_REQUIRED_BY_RARITY.épico
+    requiredFragments: FRAGMENTS_REQUIRED_BY_RARITY.lendário
   },
   {
     id: 'first-ray-aureon',
@@ -528,6 +528,17 @@ export const CHARACTER_SKIN_CATALOG: CharacterSkinTemplate[] = [
     visual: {
       primaryColor: '#111827',
       secondaryColor: '#f97316'
+    }
+  },
+  {
+    id: 'ciro-lighthouse-armada',
+    characterId: 'beacon-keeper',
+    name: 'Armada do Farol',
+    description: 'Visual lendario de almirante luminoso para Ciro Farol, com navios cruzando o horizonte.',
+    source: 'Dado da Sorte',
+    visual: {
+      primaryColor: '#0ea5e9',
+      secondaryColor: '#facc15'
     }
   }
 ];

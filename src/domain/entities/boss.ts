@@ -2,6 +2,7 @@ import type { BattleCharacterInput, BattleReward, MinionRole } from './battle';
 import { FORMATION_TURN_ORDER } from './formation';
 
 export const ULTRA_BOSS_DROP_NAME = 'Nucleo Ultra Lendario';
+export const MAX_SUMMONED_MINIONS = 3;
 
 export const ULTRA_BOSS: BattleCharacterInput = {
   id: 'erebus-prime-ultra',
@@ -43,6 +44,7 @@ export const ULTRA_BOSS_MINIONS: BattleCharacterInput[] = [
     basicSkillLevel: 8,
     specialSkillLevel: 1,
     formationSlot: FORMATION_TURN_ORDER[0],
+    occupiesSlot: false,
     combatRole: 'minion',
     minionRole: 'tanker',
     summonedById: ULTRA_BOSS.id,
@@ -66,6 +68,7 @@ export const ULTRA_BOSS_MINIONS: BattleCharacterInput[] = [
     basicSkillLevel: 8,
     specialSkillLevel: 1,
     formationSlot: FORMATION_TURN_ORDER[1],
+    occupiesSlot: false,
     combatRole: 'minion',
     minionRole: 'dps',
     summonedById: ULTRA_BOSS.id,
@@ -89,6 +92,7 @@ export const ULTRA_BOSS_MINIONS: BattleCharacterInput[] = [
     basicSkillLevel: 8,
     specialSkillLevel: 1,
     formationSlot: FORMATION_TURN_ORDER[2],
+    occupiesSlot: false,
     combatRole: 'minion',
     minionRole: 'controlador',
     summonedById: ULTRA_BOSS.id,
@@ -99,7 +103,9 @@ export const ULTRA_BOSS_MINIONS: BattleCharacterInput[] = [
 export const MINION_ROLE_LABEL: Record<MinionRole, string> = {
   tanker: 'Tanker',
   dps: 'DPS',
-  controlador: 'Controlador'
+  controlador: 'Controlador',
+  navio: 'Navio',
+  couracado: 'Couracado'
 };
 
 export const ULTRA_BOSS_REWARD: BattleReward = {
@@ -110,5 +116,5 @@ export const ULTRA_BOSS_REWARD: BattleReward = {
 };
 
 export function createUltraBossEnemyTeam(): BattleCharacterInput[] {
-  return [...ULTRA_BOSS_MINIONS, ULTRA_BOSS];
+  return [...ULTRA_BOSS_MINIONS.slice(0, MAX_SUMMONED_MINIONS), ULTRA_BOSS];
 }

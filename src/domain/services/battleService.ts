@@ -6,10 +6,11 @@ import {
   BattleReward,
   BattleTeam,
   Combatant,
-  InteractiveBattleState
+  InteractiveBattleState,
+  MinionRole
 } from '../entities/battle';
 import { RARITY_ORDER } from '../entities/character';
-import { ULTRA_BOSS_REWARD } from '../entities/boss';
+import { MAX_SUMMONED_MINIONS, ULTRA_BOSS_REWARD } from '../entities/boss';
 import {
   MAX_TEAM_MEMBERS,
   getDefaultFormationSlot,
@@ -18,6 +19,13 @@ import {
 } from '../entities/formation';
 import { createId, defaultRng, pickOne, Rng } from '../../shared/random';
 import { getSkillEffectMultiplier, scaleStats } from './characterService';
+
+const CIRO_FAROL_ID = 'beacon-keeper';
+const CIRO_SHIP_ID = 'ciro-farol-frigate';
+const CIRO_WARSHIP_ID = 'ciro-farol-warship';
+const CIRO_SHIP_NAMES = ['Fragata do Farol I', 'Fragata do Farol II', 'Fragata do Farol III'];
+
+type BattleLogMode = 'append' | 'prepend';
 
 export function calculateBasicDamage(attack: number, defense: number, multiplier = 1) {
   return Math.max(1, Math.round(attack * multiplier - defense * 0.45));
@@ -36,7 +44,17 @@ function orderBattleInputs(team: BattleCharacterInput[]) {
     .map(({ unit }) => unit);
 }
 
-function toCombatant(input: BattleCharacterInput, team: BattleTeam, index: number): Combatant {
+function inputOccupiesSlot(input: BattleCharacterInput) {
+  return input.occupiesSlot ?? input.combatRole !== 'minion';
+}
+
+function toCombatant(
+  input: BattleCharacterInput,
+  team: BattleTeam,
+  instanceIndex: number,
+  turnPosition: number,
+  occupiesSlot: boolean
+): Combatant {
   const progression = {
     weaponLevel: input.weaponLevel ?? 1,
     basicSkillLevel: input.basicSkillLevel ?? 1,
@@ -45,12 +63,13 @@ function toCombatant(input: BattleCharacterInput, team: BattleTeam, index: numbe
   };
   const stats = scaleStats(input.baseStats, input.level, input.stars, progression);
   const inputFormationSlot = input.formationSlot;
+  const defaultFormationIndex = turnPosition >= 0 ? turnPosition : instanceIndex;
   const formationSlot = inputFormationSlot !== undefined && isFormationSlot(inputFormationSlot)
     ? inputFormationSlot
-    : getDefaultFormationSlot(index);
+    : getDefaultFormationSlot(defaultFormationIndex);
 
   return {
-    instanceId: `${team}-${input.id}-${index}`,
+    instanceId: `${team}-${input.id}-${instanceIndex}`,
     characterId: input.id,
     name: input.name,
     rarity: input.rarity,
@@ -68,7 +87,8 @@ function toCombatant(input: BattleCharacterInput, team: BattleTeam, index: numbe
     pet: progression.pet,
     equippedSkinId: input.equippedSkinId,
     formationSlot,
-    turnPosition: index,
+    turnPosition,
+    occupiesSlot,
     actionCount: 0,
     defenseBuffTurns: 0,
     skipTurns: 0,
@@ -77,6 +97,21 @@ function toCombatant(input: BattleCharacterInput, team: BattleTeam, index: numbe
     summonedById: input.summonedById,
     basicOnly: input.basicOnly
   };
+}
+
+function toCombatants(inputs: BattleCharacterInput[], team: BattleTeam) {
+  let nextTurnPosition = 0;
+
+  return orderBattleInputs(inputs).map((unit, instanceIndex) => {
+    const occupiesSlot = inputOccupiesSlot(unit);
+    const turnPosition = occupiesSlot ? nextTurnPosition : -1;
+
+    if (occupiesSlot) {
+      nextTurnPosition += 1;
+    }
+
+    return toCombatant(unit, team, instanceIndex, turnPosition, occupiesSlot);
+  });
 }
 
 function alive(team: Combatant[]) {
@@ -93,13 +128,13 @@ function getCombatantByInstanceId(battle: InteractiveBattleState, instanceId: st
 }
 
 function getPositionActor(team: Combatant[], position: number) {
-  return team.find((unit) => unit.turnPosition === position && unit.currentHealth > 0);
+  return team.find((unit) => unit.occupiesSlot && unit.turnPosition === position && unit.currentHealth > 0);
 }
 
 function getTurnPositionCount(...teams: Combatant[][]) {
   const maxTurnPosition = Math.max(
     MAX_TEAM_MEMBERS - 1,
-    ...teams.flatMap((team) => team.map((unit) => unit.turnPosition))
+    ...teams.flatMap((team) => team.filter((unit) => unit.occupiesSlot).map((unit) => unit.turnPosition))
   );
 
   return maxTurnPosition + 1;
@@ -221,14 +256,157 @@ function applyDamage(target: Combatant, damage: number) {
   return reducedDamage;
 }
 
-const MINION_PROTECTION_PRIORITY = {
+function addBattleLog(logs: string[], line: string, mode: BattleLogMode) {
+  if (mode === 'prepend') {
+    logs.unshift(line);
+    return;
+  }
+
+  logs.push(line);
+}
+
+const MINION_PROTECTION_PRIORITY: Record<MinionRole, number> = {
   tanker: 0,
   controlador: 1,
-  dps: 2
+  dps: 2,
+  couracado: 2,
+  navio: 3
 };
 
 function getSummonedMinions(allies: Combatant[], summoner: Combatant) {
   return allies.filter((unit) => unit.combatRole === 'minion' && unit.summonedById === summoner.characterId);
+}
+
+function isCiroShip(unit: Combatant) {
+  return unit.characterId === CIRO_SHIP_ID || unit.characterId === CIRO_WARSHIP_ID;
+}
+
+function getCiroShips(allies: Combatant[], actor: Combatant) {
+  return getSummonedMinions(allies, actor).filter(isCiroShip);
+}
+
+function getCiroShipStats(actor: Combatant, kind: 'frigate' | 'warship') {
+  const isWarship = kind === 'warship';
+
+  return {
+    maxHealth: Math.max(1, Math.round(actor.maxHealth * (isWarship ? 0.52 : 0.34))),
+    attack: Math.max(1, Math.round(actor.attack * (isWarship ? 1.28 : 0.62))),
+    defense: Math.max(1, Math.round(actor.defense * (isWarship ? 0.72 : 0.52))),
+    speed: Math.max(20, Math.round(actor.speed * (isWarship ? 0.86 : 0.94)))
+  };
+}
+
+function configureCiroShip(unit: Combatant, actor: Combatant, kind: 'frigate' | 'warship', ordinal: number) {
+  const stats = getCiroShipStats(actor, kind);
+  const isWarship = kind === 'warship';
+
+  unit.characterId = isWarship ? CIRO_WARSHIP_ID : CIRO_SHIP_ID;
+  unit.name = isWarship ? 'Couracado do Horizonte' : (CIRO_SHIP_NAMES[ordinal - 1] ?? `Fragata do Farol ${ordinal}`);
+  unit.rarity = actor.rarity;
+  unit.element = actor.element;
+  unit.class = 'atacante';
+  unit.team = actor.team;
+  unit.maxHealth = stats.maxHealth;
+  unit.currentHealth = stats.maxHealth;
+  unit.attack = stats.attack;
+  unit.defense = stats.defense;
+  unit.speed = stats.speed;
+  unit.weaponLevel = actor.weaponLevel;
+  unit.basicSkillLevel = kind === 'warship' ? actor.specialSkillLevel : actor.basicSkillLevel;
+  unit.specialSkillLevel = 1;
+  unit.pet = undefined;
+  unit.equippedSkinId = undefined;
+  unit.formationSlot = actor.formationSlot;
+  unit.turnPosition = -1;
+  unit.occupiesSlot = false;
+  unit.actionCount = 0;
+  unit.defenseBuffTurns = 0;
+  unit.skipTurns = 0;
+  unit.combatRole = 'minion';
+  unit.minionRole = isWarship ? 'couracado' : 'navio';
+  unit.summonedById = actor.characterId;
+  unit.basicOnly = true;
+}
+
+function createCiroShip(actor: Combatant, allies: Combatant[], kind: 'frigate' | 'warship') {
+  const ships = getCiroShips(allies, actor);
+  const ordinal = ships.length + 1;
+  const stats = getCiroShipStats(actor, kind);
+  const isWarship = kind === 'warship';
+
+  return {
+    instanceId: `${actor.team}-${actor.characterId}-${isWarship ? 'warship' : 'ship'}-${ordinal}`,
+    characterId: isWarship ? CIRO_WARSHIP_ID : CIRO_SHIP_ID,
+    name: isWarship ? 'Couracado do Horizonte' : (CIRO_SHIP_NAMES[ordinal - 1] ?? `Fragata do Farol ${ordinal}`),
+    rarity: actor.rarity,
+    element: actor.element,
+    class: 'atacante',
+    team: actor.team,
+    maxHealth: stats.maxHealth,
+    currentHealth: stats.maxHealth,
+    attack: stats.attack,
+    defense: stats.defense,
+    speed: stats.speed,
+    weaponLevel: actor.weaponLevel,
+    basicSkillLevel: kind === 'warship' ? actor.specialSkillLevel : actor.basicSkillLevel,
+    specialSkillLevel: 1,
+    formationSlot: actor.formationSlot,
+    turnPosition: -1,
+    occupiesSlot: false,
+    actionCount: 0,
+    defenseBuffTurns: 0,
+    skipTurns: 0,
+    combatRole: 'minion',
+    minionRole: isWarship ? 'couracado' : 'navio',
+    summonedById: actor.characterId,
+    basicOnly: true
+  } satisfies Combatant;
+}
+
+function summonCiroShip(actor: Combatant, allies: Combatant[], kind: 'frigate' | 'warship') {
+  if (actor.characterId !== CIRO_FAROL_ID || actor.combatRole === 'minion') {
+    return undefined;
+  }
+
+  const ships = getCiroShips(allies, actor);
+  const aliveShips = alive(ships);
+  const isWarship = kind === 'warship';
+
+  if (isWarship) {
+    const activeWarship = aliveShips.find((ship) => ship.characterId === CIRO_WARSHIP_ID);
+
+    if (activeWarship) {
+      activeWarship.currentHealth = Math.min(activeWarship.maxHealth, activeWarship.currentHealth + Math.round(activeWarship.maxHealth * 0.36));
+      activeWarship.defenseBuffTurns = Math.max(activeWarship.defenseBuffTurns, 1);
+      return `${actor.name} reforcou ${activeWarship.name} para manter o navio de guerra na linha de fogo.`;
+    }
+  }
+
+  const reusableShip =
+    ships.find((ship) => ship.currentHealth <= 0 && (isWarship || ship.characterId === CIRO_SHIP_ID)) ??
+    (isWarship && ships.length >= MAX_SUMMONED_MINIONS ? ships.find((ship) => ship.characterId === CIRO_SHIP_ID) : undefined);
+
+  if (reusableShip) {
+    const ordinal = Math.max(1, ships.indexOf(reusableShip) + 1);
+    configureCiroShip(reusableShip, actor, kind, ordinal);
+    return `${actor.name} invocou ${reusableShip.name} para comandar a frota.`;
+  }
+
+  if (ships.length < MAX_SUMMONED_MINIONS) {
+    const ship = createCiroShip(actor, allies, kind);
+    allies.push(ship);
+    return `${actor.name} invocou ${ship.name} para a frota.`;
+  }
+
+  if (aliveShips.length > 0) {
+    aliveShips.forEach((ship) => {
+      ship.currentHealth = Math.min(ship.maxHealth, ship.currentHealth + Math.round(ship.maxHealth * 0.2));
+      ship.defenseBuffTurns = Math.max(ship.defenseBuffTurns, ship.minionRole === 'couracado' ? 2 : 1);
+    });
+    return `${actor.name} manteve a frota no limite e reforcou os navios ativos.`;
+  }
+
+  return `${actor.name} tentou invocar navios, mas a rota do farol foi bloqueada.`;
 }
 
 function getBossProtector(target: Combatant, enemies: Combatant[]) {
@@ -295,6 +473,63 @@ function applyBasicAttackSideEffects(actor: Combatant, target: Combatant) {
   return '';
 }
 
+function performSummonedMinionTurns(
+  actor: Combatant,
+  allies: Combatant[],
+  enemies: Combatant[],
+  logs: string[],
+  rng: Rng,
+  logMode: BattleLogMode
+) {
+  if (actor.team !== 'player' || actor.combatRole === 'minion') {
+    return 0;
+  }
+
+  const minions = alive(getSummonedMinions(allies, actor)).sort(compareCombatantsBySpeed);
+  let turns = 0;
+
+  for (const minion of minions) {
+    if (alive(enemies).length === 0) {
+      break;
+    }
+
+    turns += 1;
+
+    if (minion.skipTurns > 0) {
+      minion.skipTurns -= 1;
+      addBattleLog(logs, `${minion.name} perdeu a acao por controle.`, logMode);
+      tickBuffs([minion]);
+      continue;
+    }
+
+    const selectedTarget = selectTarget(enemies, rng);
+
+    if (!selectedTarget) {
+      turns -= 1;
+      break;
+    }
+
+    minion.actionCount += 1;
+    const { target, protectedTarget } = resolveProtectedTarget(selectedTarget, enemies);
+    const damage = applyDamage(
+      target,
+      calculateBasicDamage(minion.attack, target.defense, getSkillEffectMultiplier(minion.basicSkillLevel))
+    );
+    const sideEffect = applyBasicAttackSideEffects(minion, target);
+    const targetDescription = protectedTarget
+      ? `${protectedTarget.name}, mas ${target.name} entrou na frente`
+      : target.name;
+    addBattleLog(
+      logs,
+      `${minion.name} atacou aleatoriamente ${targetDescription} e causou ${damage} de dano${sideEffect}.`,
+      logMode
+    );
+    tickBuffs([minion]);
+  }
+
+  return turns;
+}
+
 function healLowestAlly(allies: Combatant[], amount: number) {
   const candidates = alive(allies).sort(
     (a, b) => a.currentHealth / a.maxHealth - b.currentHealth / b.maxHealth
@@ -318,13 +553,14 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
   if (actor.skipTurns > 0) {
     actor.skipTurns -= 1;
     logs.push(`${actor.name} perdeu a acao por controle.`);
-    return;
+    return 0;
   }
 
   actor.actionCount += 1;
   const useSpecial = !actor.basicOnly && actor.actionCount % 3 === 0;
 
   if (!useSpecial) {
+    const summonLog = summonCiroShip(actor, allies, 'frigate');
     const selectedTarget = selectTarget(enemies, rng);
     const { target, protectedTarget } = resolveProtectedTarget(selectedTarget, enemies);
     const damage = applyDamage(
@@ -335,8 +571,11 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
     const targetDescription = protectedTarget
       ? `${protectedTarget.name}, mas ${target.name} entrou na frente`
       : target.name;
+    if (summonLog) {
+      logs.push(summonLog);
+    }
     logs.push(`${actor.name} atacou ${targetDescription} e causou ${damage} de dano${sideEffect}.`);
-    return;
+    return performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'append');
   }
 
   if (actor.class === 'atacante') {
@@ -350,13 +589,13 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
       ? `${protectedTarget.name}, mas ${target.name} absorveu o impacto`
       : target.name;
     logs.push(`${actor.name} usou especial ofensiva em ${targetDescription} e causou ${damage} de dano.`);
-    return;
+    return performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'append');
   }
 
   if (actor.class === 'defensor') {
     actor.defenseBuffTurns = getSpecialGuardTurns(actor.specialSkillLevel);
     logs.push(`${actor.name} ativou postura defensiva e reduzira dano recebido.`);
-    return;
+    return 0;
   }
 
   if (actor.class === 'suporte') {
@@ -364,12 +603,12 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
     if (heal) {
       logs.push(`${actor.name} curou ${heal.target.name} em ${heal.amount} de vida.`);
     }
-    return;
+    return 0;
   }
 
   if (actor.class === 'invocador') {
-    logs.push(reinforceSummons(actor, allies));
-    return;
+    logs.push(summonCiroShip(actor, allies, 'warship') ?? reinforceSummons(actor, allies));
+    return performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'append');
   }
 
   const selectedTarget = selectTarget(enemies, rng);
@@ -384,6 +623,7 @@ function performAction(actor: Combatant, allies: Combatant[], enemies: Combatant
     ? `${protectedTarget.name}, mas ${target.name} recebeu o controle`
     : target.name;
   logs.push(`${actor.name} controlou ${targetDescription}, causou ${damage} de dano e atrasou a proxima acao.`);
+  return performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'append');
 }
 
 function tickBuffs(units: Combatant[]) {
@@ -460,7 +700,8 @@ function performManualAction({
   action,
   targetInstanceId,
   logs,
-  rng
+  rng,
+  onExtraTurn
 }: {
   actor: Combatant;
   allies: Combatant[];
@@ -469,6 +710,7 @@ function performManualAction({
   targetInstanceId?: string;
   logs: string[];
   rng: Rng;
+  onExtraTurn?: () => void;
 }) {
   if (actor.skipTurns > 0) {
     actor.skipTurns -= 1;
@@ -498,6 +740,7 @@ function performManualAction({
   }
 
   if (action === 'basic' && target) {
+    const summonLog = summonCiroShip(actor, allies, 'frigate');
     const resolved = resolveProtectedTarget(target, enemies);
     const damage = applyDamage(
       resolved.target,
@@ -508,7 +751,14 @@ function performManualAction({
     const targetDescription = resolved.protectedTarget
       ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} entrou na frente`
       : resolved.target.name;
+    if (summonLog) {
+      logs.unshift(summonLog);
+    }
     logs.unshift(`${actor.name} atacou ${targetDescription} e causou ${damage} de dano${sideEffect}.`);
+    const extraTurns = performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'prepend');
+    for (let turn = 0; turn < extraTurns; turn += 1) {
+      onExtraTurn?.();
+    }
     return true;
   }
 
@@ -524,6 +774,10 @@ function performManualAction({
       ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} absorveu o impacto`
       : resolved.target.name;
     logs.unshift(`${actor.name} detonou a habilidade ofensiva em ${targetDescription} e causou ${damage} de dano.`);
+    const extraTurns = performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'prepend');
+    for (let turn = 0; turn < extraTurns; turn += 1) {
+      onExtraTurn?.();
+    }
     return true;
   }
 
@@ -549,7 +803,11 @@ function performManualAction({
   }
 
   if (actor.class === 'invocador') {
-    logs.unshift(reinforceSummons(actor, allies));
+    logs.unshift(summonCiroShip(actor, allies, 'warship') ?? reinforceSummons(actor, allies));
+    const extraTurns = performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'prepend');
+    for (let turn = 0; turn < extraTurns; turn += 1) {
+      onExtraTurn?.();
+    }
     return true;
   }
 
@@ -565,6 +823,10 @@ function performManualAction({
       ? `${resolved.protectedTarget.name}, mas ${resolved.target.name} recebeu o controle`
       : resolved.target.name;
     logs.unshift(`${actor.name} travou ${targetDescription}, causou ${damage} de dano e atrasou a proxima acao.`);
+    const extraTurns = performSummonedMinionTurns(actor, allies, enemies, logs, rng, 'prepend');
+    for (let turn = 0; turn < extraTurns; turn += 1) {
+      onExtraTurn?.();
+    }
   }
 
   return true;
@@ -611,7 +873,10 @@ function performEnemyQueuedTurn(battle: InteractiveBattleState, actor: Combatant
     action,
     targetInstanceId: target?.instanceId,
     logs: battle.logs,
-    rng
+    rng,
+    onExtraTurn: () => {
+      battle.turns += 1;
+    }
   });
 
   if (!actionDone) {
@@ -716,8 +981,8 @@ export function createInteractiveBattle({
         ? 'Erebus Prime entrou em campo e invocou uma linha de minions para proteger o Nucleo Ultra Lendario.'
         : 'Encontro iniciado. A formacao define o proximo aliado a agir.'
     ],
-    playerTeam: orderBattleInputs(playerTeam).map((unit, index) => toCombatant(unit, 'player', index)),
-    enemyTeam: orderBattleInputs(enemyTeam).map((unit, index) => toCombatant(unit, 'enemy', index)),
+    playerTeam: toCombatants(playerTeam, 'player'),
+    enemyTeam: toCombatants(enemyTeam, 'enemy'),
     turnPosition: 0,
     turnQueue: []
   };
@@ -770,7 +1035,10 @@ export function performPlayerBattleAction({
     action,
     targetInstanceId,
     logs: next.logs,
-    rng
+    rng,
+    onExtraTurn: () => {
+      next.turns += 1;
+    }
   });
 
   if (!actionDone) {
@@ -811,8 +1079,8 @@ export function runAutoBattle({
   rng?: Rng;
   now?: Date;
 }): BattleReport {
-  const playerCombatants = orderBattleInputs(playerTeam).map((unit, index) => toCombatant(unit, 'player', index));
-  const enemyCombatants = orderBattleInputs(enemyTeam).map((unit, index) => toCombatant(unit, 'enemy', index));
+  const playerCombatants = toCombatants(playerTeam, 'player');
+  const enemyCombatants = toCombatants(enemyTeam, 'enemy');
   const logs: string[] = [];
   let turns = 0;
   const turnPositionCount = getTurnPositionCount(playerCombatants, enemyCombatants);
@@ -834,7 +1102,7 @@ export function runAutoBattle({
         if (alive(enemies).length === 0) break;
 
         turns += 1;
-        performAction(actor, allies, enemies, logs, rng);
+        turns += performAction(actor, allies, enemies, logs, rng);
         tickBuffs([actor]);
 
         if (alive(enemies).length === 0) break;

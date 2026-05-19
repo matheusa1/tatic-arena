@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createUltraBossEnemyTeam } from '../../entities/boss';
+import { MAX_SUMMONED_MINIONS, createUltraBossEnemyTeam } from '../../entities/boss';
 import { ULTRA_MAX_SKILL_LEVEL } from '../../entities/character';
 import { CHARACTER_CATALOG } from '../../entities/characters';
 import {
@@ -343,6 +343,139 @@ describe('battleService', () => {
     expect(canUseSpecial(minion)).toBe(false);
     expect(boss.class).toBe('invocador');
     expect(canUseSpecial(boss)).toBe(true);
+  });
+
+  it('turns Ciro Farol into a legendary ship summoner', () => {
+    const ciro = CHARACTER_CATALOG.find((character) => character.id === 'beacon-keeper')!;
+
+    expect(ciro.rarity).toBe('lendário');
+    expect(ciro.class).toBe('invocador');
+    expect(ciro.basicSkill.effectType).toBe('summon');
+    expect(ciro.specialSkill.effectType).toBe('summon');
+  });
+
+  it('summons ships on Ciro basic attacks and lets allied minions act immediately', () => {
+    const ciro = CHARACTER_CATALOG.find((character) => character.id === 'beacon-keeper')!;
+    const battle = createInteractiveBattle({
+      playerTeam: [
+        {
+          id: ciro.id,
+          name: ciro.name,
+          rarity: ciro.rarity,
+          element: ciro.element,
+          class: ciro.class,
+          level: 1,
+          stars: 1,
+          baseStats: ciro.baseStats
+        }
+      ],
+      enemyTeam: [
+        {
+          id: 'target',
+          name: 'Alvo',
+          rarity: 'comum' as const,
+          element: 'terra' as const,
+          class: 'defensor' as const,
+          level: 1,
+          stars: 1,
+          baseStats: { health: 2000, attack: 1, defense: 10, speed: 1 }
+        }
+      ]
+    });
+    const actor = getActivePlayerActor(battle)!;
+    const target = battle.enemyTeam[0];
+
+    const next = performPlayerBattleAction({
+      battle,
+      actorInstanceId: actor.instanceId,
+      targetInstanceId: target.instanceId,
+      action: 'basic',
+      rng: () => 0
+    });
+    const ships = next.playerTeam.filter((unit) => unit.combatRole === 'minion' && unit.summonedById === ciro.id);
+
+    expect(ships).toHaveLength(1);
+    expect(ships[0].name).toContain('Fragata do Farol');
+    expect(ships[0].occupiesSlot).toBe(false);
+    expect(ships[0].basicOnly).toBe(true);
+    expect(next.turns).toBe(2);
+    expect(next.enemyTeam[0].currentHealth).toBeLessThan(target.currentHealth);
+    expect(next.logs[0]).toContain('atacou aleatoriamente');
+  });
+
+  it('summons a high-attack warship with Ciro special', () => {
+    const ciro = CHARACTER_CATALOG.find((character) => character.id === 'beacon-keeper')!;
+    const battle = createInteractiveBattle({
+      playerTeam: [
+        {
+          id: ciro.id,
+          name: ciro.name,
+          rarity: ciro.rarity,
+          element: ciro.element,
+          class: ciro.class,
+          level: 1,
+          stars: 1,
+          baseStats: ciro.baseStats,
+          specialSkillLevel: 4
+        }
+      ],
+      enemyTeam: [
+        {
+          id: 'target',
+          name: 'Alvo',
+          rarity: 'comum' as const,
+          element: 'terra' as const,
+          class: 'defensor' as const,
+          level: 1,
+          stars: 1,
+          baseStats: { health: 2400, attack: 1, defense: 10, speed: 1 }
+        }
+      ]
+    });
+    const actor = getActivePlayerActor(battle)!;
+    actor.actionCount = 2;
+
+    const next = performPlayerBattleAction({
+      battle,
+      actorInstanceId: actor.instanceId,
+      action: 'special',
+      rng: () => 0
+    });
+    const warship = next.playerTeam.find((unit) => unit.characterId === 'ciro-farol-warship')!;
+
+    expect(warship).toBeDefined();
+    expect(warship.name).toBe('Couracado do Horizonte');
+    expect(warship.minionRole).toBe('couracado');
+    expect(warship.attack).toBeGreaterThan(actor.attack);
+    expect(next.turns).toBe(2);
+    expect(next.logs.some((line) => line.includes('Couracado do Horizonte'))).toBe(true);
+  });
+
+  it('keeps ultra boss summons out of character turn slots and caps them at three', () => {
+    const battle = createInteractiveBattle({
+      playerTeam: [
+        {
+          id: 'player',
+          name: 'Aliado',
+          rarity: 'comum' as const,
+          element: 'fogo' as const,
+          class: 'atacante' as const,
+          level: 1,
+          stars: 1,
+          baseStats: { health: 1000, attack: 20, defense: 10, speed: 10 }
+        }
+      ],
+      enemyTeam: createUltraBossEnemyTeam(),
+      encounterType: 'ultra-boss'
+    });
+    const minions = battle.enemyTeam.filter((unit) => unit.combatRole === 'minion');
+    const boss = battle.enemyTeam.find((unit) => unit.combatRole === 'boss')!;
+    const minionIds = new Set(minions.map((unit) => unit.instanceId));
+
+    expect(minions).toHaveLength(MAX_SUMMONED_MINIONS);
+    expect(minions.every((unit) => !unit.occupiesSlot && unit.turnPosition === -1)).toBe(true);
+    expect(battle.turnQueue.some((instanceId) => minionIds.has(instanceId))).toBe(false);
+    expect(boss.occupiesSlot).toBe(true);
   });
 
   it('marks ultra boss encounters and drops an ultra core on victory', () => {
